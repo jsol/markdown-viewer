@@ -1,0 +1,5 @@
+option('version',
+  type : 'string',
+  value : 'N/A',
+  description : 'Version of the application built'
+)
