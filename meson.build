@@ -1,5 +1,5 @@
 project('glib-test', 'c',
-        meson_version : '>= 0.61.0',
+        meson_version : '>= 1.1.0',
         license: 'MIT',
         default_options: [
             'warning_level=1',
