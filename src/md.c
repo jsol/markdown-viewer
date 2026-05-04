@@ -286,14 +286,21 @@ parse_markdown(md_t *ctx, const char *markdown)
 }
 
 static void
-handle_markdown(listener_t *listener, const gchar *markdown, gpointer user_data)
-{
-  md_t *ctx = user_data;
-
+clear_md(md_t *ctx) {
   g_clear_pointer(&ctx->root_path, g_free);
   g_clear_pointer(&ctx->toc, toc_free);
   g_clear_pointer(&ctx->html, html_free);
   g_clear_pointer(&ctx->image_monitors, g_ptr_array_unref);
+}
+
+static void
+handle_markdown(listener_t *listener, const gchar *markdown, gpointer user_data)
+{
+  md_t *ctx = user_data;
+
+  g_print("Parsing markdown file: %s\n", listener_get_file_path(listener));
+
+  clear_md(ctx);
 
   ctx->root_path = g_path_get_dirname(listener_get_file_path(listener));
 
@@ -309,6 +316,7 @@ handle_markdown(listener_t *listener, const gchar *markdown, gpointer user_data)
   gtk_widget_set_margin_end(ctx->box, 20);
   gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(ctx->scroll), ctx->box);
 
+  g_print("Initiating parsing: %s\n", listener_get_file_path(listener));
   parse_markdown(ctx, markdown);
 }
 
@@ -320,9 +328,10 @@ md_new(listener_t *listener, GtkScrolledWindow *scroll)
   md->scroll = g_object_ref(scroll);
   md->listener = listener;
 
+  md->image_monitors = g_ptr_array_new_with_free_func(g_object_unref);
   md->root_path = g_path_get_dirname(listener_get_file_path(listener));
 
-  listener_set_md_cb(listener, handle_markdown);
+  listener_set_md_cb(listener, handle_markdown, md);
 
   return md;
 }
@@ -334,11 +343,8 @@ md_free(md_t *md)
     return;
   }
 
-  g_clear_pointer(&md->root_path, g_free);
-  g_clear_pointer(&md->toc, toc_free);
-  g_clear_pointer(&md->html, html_free);
-  g_clear_pointer(&md->image_monitors, g_ptr_array_unref);
-
+  clear_md(md);
   g_free(md);
+
   return;
 }

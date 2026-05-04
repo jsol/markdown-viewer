@@ -5,9 +5,13 @@
 struct listener {
   GFileMonitor *monitor;
   GFile *file;
+
   listener_approved_cb cb;
-  listener_md_cb md_cb;
   gpointer user_data;
+
+  listener_md_cb md_cb;
+  gpointer md_user_data;
+
   gchar *run_cmd;
   gboolean approved;
 };
@@ -54,12 +58,15 @@ read_md(gpointer data)
   gchar *markdown = NULL;
   gsize len = 0;
 
+  g_print("Reading markdown file: %s\n", g_file_peek_path(ctx->file));
+
   if (!g_file_load_contents(ctx->file, NULL, &markdown, &len, NULL, NULL)) {
     g_printerr("Failed to read file: %s\n", g_file_peek_path(ctx->file));
     return;
   }
 
-  ctx->md_cb(ctx, markdown, ctx->user_data);
+  g_print("Read markdown file: %s\n", g_file_peek_path(ctx->file));
+  ctx->md_cb(ctx, markdown, ctx->md_user_data);
   g_free(markdown);
 }
 
@@ -154,9 +161,11 @@ listener_new(GFile *file, listener_approved_cb cb, gpointer user_data)
 }
 
 void
-listener_set_md_cb(listener_t *ctx, listener_md_cb md_cb)
+listener_set_md_cb(listener_t *ctx, listener_md_cb md_cb, gpointer user_data)
 {
   ctx->md_cb = md_cb;
+  ctx->md_user_data = user_data;
+
   if (g_file_query_exists(ctx->file, NULL)) {
     g_idle_add_once(read_md, ctx);
   }

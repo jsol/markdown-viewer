@@ -39,7 +39,7 @@ typedef void (*listener_md_cb)(listener_t *listener,
 listener_t *
 listener_new(GFile *file, listener_approved_cb cb, gpointer user_data);
 
-void listener_set_md_cb(listener_t *listener, listener_md_cb md_cb);
+void listener_set_md_cb(listener_t *listener, listener_md_cb md_cb, gpointer user_data);
 
 /**
  * Approve the run command.
