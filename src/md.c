@@ -21,7 +21,9 @@ struct md {
   html_t *html;
 };
 
-static void print_node(cmark_node *node, int indent) {
+static void
+print_node(cmark_node *node, int indent)
+{
   for (int i = 0; i < indent; i++) {
     g_print("  ");
   }
@@ -47,10 +49,12 @@ static void print_node(cmark_node *node, int indent) {
  * Returns true if the given HTML tag is allowed (as in it has a corresponding
  * overlap in the Pango styles).
  */
-static gboolean allowed_html(const char *html) {
-  const char *allowed_tags[] = {"<b>",  "</b>",  "<i>",      "</i>",
-                                "<u>",  "</u>",  "<strong>", "</strong>",
-                                "<em>", "</em>", NULL};
+static gboolean
+allowed_html(const char *html)
+{
+  const char *allowed_tags[] = { "<b>",  "</b>",  "<i>",      "</i>",
+                                 "<u>",  "</u>",  "<strong>", "</strong>",
+                                 "<em>", "</em>", NULL };
 
   for (int i = 0; allowed_tags[i] != NULL; i++) {
     if (g_strcmp0(html, allowed_tags[i]) == 0) {
@@ -60,7 +64,9 @@ static gboolean allowed_html(const char *html) {
   return FALSE;
 }
 
-static GFile *normalize_url(md_t *ctx, const char *url) {
+static GFile *
+normalize_url(md_t *ctx, const char *url)
+{
   GFile *dirname_file = NULL;
   GFile *image_file = NULL;
 
@@ -81,7 +87,9 @@ static GFile *normalize_url(md_t *ctx, const char *url) {
   return image_file;
 }
 
-static void display_html_table(html_t *ctx, const char *html, GtkWidget *box) {
+static void
+display_html_table(html_t *ctx, const char *html, GtkWidget *box)
+{
   GtkWidget *frame = NULL;
   GtkWidget *table;
 
@@ -96,8 +104,9 @@ static void display_html_table(html_t *ctx, const char *html, GtkWidget *box) {
   gtk_box_append(GTK_BOX(box), frame);
 }
 
-static GtkWidget *display_image(GFile *file, GtkWidget *old_image,
-                                GtkWidget *box) {
+static GtkWidget *
+display_image(GFile *file, GtkWidget *old_image, GtkWidget *box)
+{
   GtkWidget *image = gtk_picture_new_for_file(file);
   gtk_picture_set_can_shrink(GTK_PICTURE(image), FALSE);
   gtk_widget_set_halign(image, GTK_ALIGN_START);
@@ -113,23 +122,30 @@ static GtkWidget *display_image(GFile *file, GtkWidget *old_image,
   return image;
 }
 
-static void monitor_image_changes(GFileMonitor *monitor, GFile *file,
-                                  G_GNUC_UNUSED GFile *other_file,
-                                  GFileMonitorEvent event_type,
-                                  G_GNUC_UNUSED gpointer user_data) {
+static void
+monitor_image_changes(GFileMonitor *monitor,
+                      GFile *file,
+                      G_GNUC_UNUSED GFile *other_file,
+                      GFileMonitorEvent event_type,
+                      G_GNUC_UNUSED gpointer user_data)
+{
   if (event_type == G_FILE_MONITOR_EVENT_CHANGED ||
       event_type == G_FILE_MONITOR_EVENT_CREATED) {
     g_message("Image changed: %s", g_file_peek_path(file));
     GtkWidget *old_image = g_object_get_data(G_OBJECT(monitor), OBJ_DATA_IMG);
 
     GtkWidget *new_image =
-        display_image(file, old_image, gtk_widget_get_parent(old_image));
-    g_object_set_data_full(G_OBJECT(monitor), OBJ_DATA_IMG,
-                           g_object_ref_sink(new_image), g_object_unref);
+            display_image(file, old_image, gtk_widget_get_parent(old_image));
+    g_object_set_data_full(G_OBJECT(monitor),
+                           OBJ_DATA_IMG,
+                           g_object_ref_sink(new_image),
+                           g_object_unref);
   }
 }
 
-static void display_paragraph(md_t *ctx, cmark_node *node, GtkWidget *box) {
+static void
+display_paragraph(md_t *ctx, cmark_node *node, GtkWidget *box)
+{
   cmark_node *child = cmark_node_first_child(node);
   GString *paragraph_text = g_string_new("");
 
@@ -144,10 +160,14 @@ static void display_paragraph(md_t *ctx, cmark_node *node, GtkWidget *box) {
 
       monitor = g_file_monitor_file(url, G_FILE_MONITOR_NONE, NULL, NULL);
 
-      g_object_set_data_full(G_OBJECT(monitor), OBJ_DATA_IMG,
-                             g_object_ref_sink(image), g_object_unref);
+      g_object_set_data_full(G_OBJECT(monitor),
+                             OBJ_DATA_IMG,
+                             g_object_ref_sink(image),
+                             g_object_unref);
       g_ptr_array_add(ctx->image_monitors, monitor);
-      g_signal_connect(monitor, "changed", G_CALLBACK(monitor_image_changes),
+      g_signal_connect(monitor,
+                       "changed",
+                       G_CALLBACK(monitor_image_changes),
                        NULL);
       g_free(url);
 
@@ -156,7 +176,7 @@ static void display_paragraph(md_t *ctx, cmark_node *node, GtkWidget *box) {
 
     case CMARK_NODE_TEXT: {
       gchar *escaped_text =
-          g_markup_escape_text(cmark_node_get_literal(child), -1);
+              g_markup_escape_text(cmark_node_get_literal(child), -1);
       g_string_append(paragraph_text, escaped_text);
       g_free(escaped_text);
       break;
@@ -192,7 +212,9 @@ static void display_paragraph(md_t *ctx, cmark_node *node, GtkWidget *box) {
   g_string_free(paragraph_text, TRUE);
 }
 
-static void display_markdown(md_t *ctx, cmark_node *node, GtkWidget *box) {
+static void
+display_markdown(md_t *ctx, cmark_node *node, GtkWidget *box)
+{
   cmark_node *child = cmark_node_first_child(node);
 
   switch (cmark_node_get_type(node)) {
@@ -220,7 +242,8 @@ static void display_markdown(md_t *ctx, cmark_node *node, GtkWidget *box) {
     GtkWidget *label;
     cmark_node *heading_child = cmark_node_first_child(node);
 
-    label = toc_add_heading(ctx->toc, cmark_node_get_literal(heading_child),
+    label = toc_add_heading(ctx->toc,
+                            cmark_node_get_literal(heading_child),
                             cmark_node_get_heading_level(node));
 
     gtk_widget_set_margin_top(label, 10);
@@ -251,17 +274,20 @@ static void display_markdown(md_t *ctx, cmark_node *node, GtkWidget *box) {
   }
 }
 
-static void parse_markdown(md_t *ctx, const char *markdown) {
+static void
+parse_markdown(md_t *ctx, const char *markdown)
+{
   cmark_node *doc =
-      cmark_parse_document(markdown, strlen(markdown), CMARK_OPT_DEFAULT);
+          cmark_parse_document(markdown, strlen(markdown), CMARK_OPT_DEFAULT);
 
   print_node(doc, 0);
   display_markdown(ctx, doc, ctx->box);
   cmark_node_free(doc);
 }
 
-static void handle_markdown(listener_t *listener, const gchar *markdown,
-                            gpointer user_data) {
+static void
+handle_markdown(listener_t *listener, const gchar *markdown, gpointer user_data)
+{
   md_t *ctx = user_data;
 
   g_clear_pointer(&ctx->root_path, g_free);
@@ -286,7 +312,9 @@ static void handle_markdown(listener_t *listener, const gchar *markdown,
   parse_markdown(ctx, markdown);
 }
 
-md_t *md_new(listener_t *listener, GtkScrolledWindow *scroll) {
+md_t *
+md_new(listener_t *listener, GtkScrolledWindow *scroll)
+{
   md_t *md = g_new0(md_t, 1);
 
   md->scroll = g_object_ref(scroll);
@@ -299,7 +327,9 @@ md_t *md_new(listener_t *listener, GtkScrolledWindow *scroll) {
   return md;
 }
 
-void md_free(md_t *md) {
+void
+md_free(md_t *md)
+{
   if (!md) {
     return;
   }

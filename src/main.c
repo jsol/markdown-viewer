@@ -19,7 +19,9 @@ struct app_ctx {
   md_t *md;
 };
 
-static void show_no_run_comment(struct app_ctx *ctx, const gchar *path) {
+static void
+show_no_run_comment(struct app_ctx *ctx, const gchar *path)
+{
   AdwDialog *dialog = adw_dialog_new();
   gchar *text;
 
@@ -45,8 +47,11 @@ static void show_no_run_comment(struct app_ctx *ctx, const gchar *path) {
   adw_dialog_present(dialog, ctx->window);
 }
 
-static void show_run_comment(struct app_ctx *ctx, const gchar *run_cmd,
-                             listener_t *listener) {
+static void
+show_run_comment(struct app_ctx *ctx,
+                 const gchar *run_cmd,
+                 listener_t *listener)
+{
   AdwDialog *dialog = adw_dialog_new();
   GtkWidget *button_yes = NULL;
   GtkWidget *button_no = NULL;
@@ -54,8 +59,9 @@ static void show_run_comment(struct app_ctx *ctx, const gchar *run_cmd,
 
   adw_dialog_set_title(dialog, "Allow run command");
 
-  gchar *text = g_strdup_printf(
-      "Do you wish to run \"%s\" to transform this file?", run_cmd);
+  gchar *text =
+          g_strdup_printf("Do you wish to run \"%s\" to transform this file?",
+                          run_cmd);
 
   GtkWidget *label = gtk_label_new(text);
   gtk_label_set_wrap(GTK_LABEL(label), TRUE);
@@ -78,18 +84,27 @@ static void show_run_comment(struct app_ctx *ctx, const gchar *run_cmd,
 
   adw_dialog_set_child(dialog, grid);
 
-  g_signal_connect_swapped(button_yes, "clicked",
-                           G_CALLBACK(listener_approve_run), listener);
-  g_signal_connect_swapped(button_yes, "clicked", G_CALLBACK(adw_dialog_close),
+  g_signal_connect_swapped(button_yes,
+                           "clicked",
+                           G_CALLBACK(listener_approve_run),
+                           listener);
+  g_signal_connect_swapped(button_yes,
+                           "clicked",
+                           G_CALLBACK(adw_dialog_close),
                            dialog);
-  g_signal_connect_swapped(button_no, "clicked", G_CALLBACK(adw_dialog_close),
+  g_signal_connect_swapped(button_no,
+                           "clicked",
+                           G_CALLBACK(adw_dialog_close),
                            dialog);
 
   adw_dialog_present(dialog, ctx->window);
 }
 
-static void handle_run_comment(listener_t *listener, const gchar *run_cmd,
-                               gpointer user_data) {
+static void
+handle_run_comment(listener_t *listener,
+                   const gchar *run_cmd,
+                   gpointer user_data)
+{
   struct app_ctx *ctx = user_data;
 
   if (run_cmd == NULL) {
@@ -100,9 +115,14 @@ static void handle_run_comment(listener_t *listener, const gchar *run_cmd,
   show_run_comment(ctx, run_cmd, listener);
 }
 
-static void open_cb(GApplication *self, gpointer files_pointer, gint n_files,
-                    G_GNUC_UNUSED gchar *hint, gpointer user_data) {
-  GFile **files = (GFile **)files_pointer;
+static void
+open_cb(GApplication *self,
+        gpointer files_pointer,
+        gint n_files,
+        G_GNUC_UNUSED gchar *hint,
+        gpointer user_data)
+{
+  GFile **files = (GFile **) files_pointer;
   struct app_ctx *ctx = user_data;
 
   g_application_activate(self);
@@ -133,26 +153,31 @@ static void open_cb(GApplication *self, gpointer files_pointer, gint n_files,
   }
 }
 
-static void setup_styles(void) {
+static void
+setup_styles(void)
+{
   GtkCssProvider *provider;
   GdkDisplay *display;
   const gchar *style_light =
-      ".heading-1{font-size: xx-large; font-weight: bold;} "
-      ".heading-2{font-size: x-large; font-weight: bold;} "
-      ".heading-3{font-size: large; font-weight: bold;} "
-      ".heading-4{font-size: medium; font-weight: bolder;} "
-      ".heading-5{font-size: medium; font-weight: bold;} "
-      ".heading-6{font-size: medium; font-weight: bold;} "
-      ".table-header{background-color: #AAAAAA; }";
+          ".heading-1{font-size: xx-large; font-weight: bold;} "
+          ".heading-2{font-size: x-large; font-weight: bold;} "
+          ".heading-3{font-size: large; font-weight: bold;} "
+          ".heading-4{font-size: medium; font-weight: bolder;} "
+          ".heading-5{font-size: medium; font-weight: bold;} "
+          ".heading-6{font-size: medium; font-weight: bold;} "
+          ".table-header{background-color: #AAAAAA; }";
 
   provider = gtk_css_provider_new();
   display = gdk_display_get_default();
   gtk_css_provider_load_from_string(provider, style_light);
-  gtk_style_context_add_provider_for_display(
-      display, GTK_STYLE_PROVIDER(provider), GTK_STYLE_PROVIDER_PRIORITY_USER);
+  gtk_style_context_add_provider_for_display(display,
+                                             GTK_STYLE_PROVIDER(provider),
+                                             GTK_STYLE_PROVIDER_PRIORITY_USER);
 }
 
-static void activate_cb(GtkApplication *app, gpointer user_data) {
+static void
+activate_cb(GtkApplication *app, gpointer user_data)
+{
   GtkWidget *window = adw_application_window_new(app);
   GtkWidget *scroll = NULL;
   struct app_ctx *ctx = user_data;
@@ -162,7 +187,8 @@ static void activate_cb(GtkApplication *app, gpointer user_data) {
   gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(scroll), 300);
 
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),
-                                 GTK_POLICY_AUTOMATIC, GTK_POLICY_ALWAYS);
+                                 GTK_POLICY_AUTOMATIC,
+                                 GTK_POLICY_ALWAYS);
 
   gtk_scrolled_window_set_max_content_height(GTK_SCROLLED_WINDOW(scroll), -1);
 
@@ -174,9 +200,11 @@ static void activate_cb(GtkApplication *app, gpointer user_data) {
   gtk_window_present(GTK_WINDOW(window));
 }
 
-int main(int argc, char **argv) {
+int
+main(int argc, char **argv)
+{
   AdwApplication *app = NULL;
-  struct app_ctx ctx = {0};
+  struct app_ctx ctx = { 0 };
 
   ctx.id[0] = 'C';
   ctx.id[1] = 'T';
@@ -188,7 +216,7 @@ int main(int argc, char **argv) {
   }
 
   ctx.file_listeners =
-      g_ptr_array_new_with_free_func((GDestroyNotify)listener_free);
+          g_ptr_array_new_with_free_func((GDestroyNotify) listener_free);
   app = adw_application_new("com.example.MarkdownParser",
                             G_APPLICATION_HANDLES_OPEN);
   g_signal_connect(app, "open", G_CALLBACK(open_cb), &ctx);

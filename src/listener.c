@@ -12,10 +12,12 @@ struct listener {
   gboolean approved;
 };
 
-static gchar *run_exts[] = {".yaml", ".puml", NULL};
-static gchar *run_prefix[] = {"#!", "'!", NULL};
+static gchar *run_exts[] = { ".yaml", ".puml", NULL };
+static gchar *run_prefix[] = { "#!", "'!", NULL };
 
-static gchar *change_ext_to_md(const gchar *input) {
+static gchar *
+change_ext_to_md(const gchar *input)
+{
   gchar *output = NULL;
   gchar *ext = NULL;
 
@@ -24,13 +26,15 @@ static gchar *change_ext_to_md(const gchar *input) {
   if (!ext) {
     output = g_strdup_printf("%s.md", input);
   } else {
-    output = g_strdup_printf("%.*s.md", (int)(ext - input), input);
+    output = g_strdup_printf("%.*s.md", (int) (ext - input), input);
   }
 
   return output;
 }
 
-static void run_command(listener_t *ctx) {
+static void
+run_command(listener_t *ctx)
+{
   GError *error = NULL;
 
   if (!ctx->run_cmd || !ctx->approved) {
@@ -43,7 +47,9 @@ static void run_command(listener_t *ctx) {
   }
 }
 
-static void read_md(gpointer data) {
+static void
+read_md(gpointer data)
+{
   listener_t *ctx = data;
   gchar *markdown = NULL;
   gsize len = 0;
@@ -57,9 +63,13 @@ static void read_md(gpointer data) {
   g_free(markdown);
 }
 
-static void monitor_changes(G_GNUC_UNUSED GFileMonitor *monitor, GFile *file,
-                            G_GNUC_UNUSED GFile *other_file,
-                            GFileMonitorEvent event_type, gpointer user_data) {
+static void
+monitor_changes(G_GNUC_UNUSED GFileMonitor *monitor,
+                GFile *file,
+                G_GNUC_UNUSED GFile *other_file,
+                GFileMonitorEvent event_type,
+                gpointer user_data)
+{
   listener_t *ctx = user_data;
   if (event_type == G_FILE_MONITOR_EVENT_CHANGED ||
       event_type == G_FILE_MONITOR_EVENT_CREATED) {
@@ -71,12 +81,15 @@ static void monitor_changes(G_GNUC_UNUSED GFileMonitor *monitor, GFile *file,
       run_command(user_data);
     }
   } else {
-    g_message("File event: %d for file: %s", event_type,
+    g_message("File event: %d for file: %s",
+              event_type,
               g_file_peek_path(file));
   }
 }
 
-static void setup_run_cmd(listener_t *ctx, const gchar *prefix) {
+static void
+setup_run_cmd(listener_t *ctx, const gchar *prefix)
+{
   GFileInputStream *stream = NULL;
   GDataInputStream *data_stream = NULL;
 
@@ -85,8 +98,10 @@ static void setup_run_cmd(listener_t *ctx, const gchar *prefix) {
 
   gchar *line = NULL;
 
-  while (
-      (line = g_data_input_stream_read_line(data_stream, NULL, NULL, NULL))) {
+  while ((line = g_data_input_stream_read_line(data_stream,
+                                               NULL,
+                                               NULL,
+                                               NULL))) {
     if (g_str_has_prefix(line, prefix)) {
       break;
     }
@@ -109,14 +124,15 @@ static void setup_run_cmd(listener_t *ctx, const gchar *prefix) {
   g_free(line);
 }
 
-listener_t *listener_new(GFile *file, listener_approved_cb cb,
-                         gpointer user_data) {
+listener_t *
+listener_new(GFile *file, listener_approved_cb cb, gpointer user_data)
+{
   listener_t *listener = g_new0(listener_t, 1);
 
   listener->file = g_object_ref(file);
   listener->user_data = user_data;
   listener->monitor =
-      g_file_monitor_file(file, G_FILE_MONITOR_NONE, NULL, NULL);
+          g_file_monitor_file(file, G_FILE_MONITOR_NONE, NULL, NULL);
 
   if (!listener_is_md(listener)) {
     listener->cb = cb;
@@ -129,20 +145,26 @@ listener_t *listener_new(GFile *file, listener_approved_cb cb,
     }
   }
 
-  g_signal_connect(listener->monitor, "changed", G_CALLBACK(monitor_changes),
+  g_signal_connect(listener->monitor,
+                   "changed",
+                   G_CALLBACK(monitor_changes),
                    listener);
 
   return listener;
 }
 
-void listener_set_md_cb(listener_t *ctx, listener_md_cb md_cb) {
+void
+listener_set_md_cb(listener_t *ctx, listener_md_cb md_cb)
+{
   ctx->md_cb = md_cb;
   if (g_file_query_exists(ctx->file, NULL)) {
     g_idle_add_once(read_md, ctx);
   }
 }
 
-void listener_approve_run(listener_t *ctx) {
+void
+listener_approve_run(listener_t *ctx)
+{
   GString *cmd_str = NULL;
   gchar *output = NULL;
   gchar *cmd = NULL;
@@ -166,19 +188,27 @@ void listener_approve_run(listener_t *ctx) {
   ctx->run_cmd = cmd;
 }
 
-gboolean listener_is_md(listener_t *listener) {
+gboolean
+listener_is_md(listener_t *listener)
+{
   return g_str_has_suffix(g_file_peek_path(listener->file), ".md");
 }
 
-const gchar *listener_get_run_cmd(listener_t *listener) {
+const gchar *
+listener_get_run_cmd(listener_t *listener)
+{
   return listener->run_cmd;
 }
 
-const gchar *listener_get_file_path(listener_t *listener) {
+const gchar *
+listener_get_file_path(listener_t *listener)
+{
   return g_file_peek_path(listener->file);
 }
 
-GFile *listener_get_output_file(listener_t *listener) {
+GFile *
+listener_get_output_file(listener_t *listener)
+{
   gchar *output;
   GFile *output_file;
 
@@ -191,7 +221,9 @@ GFile *listener_get_output_file(listener_t *listener) {
   return output_file;
 }
 
-void listener_free(listener_t *listener) {
+void
+listener_free(listener_t *listener)
+{
   if (!listener) {
     return;
   }

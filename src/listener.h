@@ -12,7 +12,8 @@ typedef struct listener listener_t;
  * @param run_cmd The run command
  * @param user_data The user data
  */
-typedef void (*listener_approved_cb)(listener_t *listener, const gchar *run_cmd,
+typedef void (*listener_approved_cb)(listener_t *listener,
+                                     const gchar *run_cmd,
                                      gpointer user_data);
 /**
  * Callback for when the listener has read the markdown.
@@ -21,7 +22,8 @@ typedef void (*listener_approved_cb)(listener_t *listener, const gchar *run_cmd,
  * @param md The markdown
  * @param user_data The user data
  */
-typedef void (*listener_md_cb)(listener_t *listener, const gchar *md,
+typedef void (*listener_md_cb)(listener_t *listener,
+                               const gchar *md,
                                gpointer user_data);
 
 /**
@@ -34,9 +36,8 @@ typedef void (*listener_md_cb)(listener_t *listener, const gchar *md,
  *
  * @return The new listener
  */
-listener_t *listener_new(GFile *file, listener_approved_cb cb,
-                         gpointer user_data);
-
+listener_t *
+listener_new(GFile *file, listener_approved_cb cb, gpointer user_data);
 
 void listener_set_md_cb(listener_t *listener, listener_md_cb md_cb);
 
