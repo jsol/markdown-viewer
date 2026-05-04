@@ -165,6 +165,7 @@ setup_styles(void)
           ".heading-4{font-size: medium; font-weight: bolder;} "
           ".heading-5{font-size: medium; font-weight: bold;} "
           ".heading-6{font-size: medium; font-weight: bold;} "
+          ".monospace{font-family: monospace;} "
           ".table-header{background-color: #AAAAAA; }";
 
   provider = gtk_css_provider_new();

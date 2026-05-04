@@ -238,6 +238,16 @@ display_markdown(md_t *ctx, cmark_node *node, GtkWidget *box)
     display_html_table(ctx->html, cmark_node_get_literal(node), box);
     break;
   }
+
+  case CMARK_NODE_CODE_BLOCK: {
+    GtkWidget *label = gtk_label_new(cmark_node_get_literal(node));
+    gtk_widget_set_halign(label, GTK_ALIGN_START);
+    gtk_label_set_wrap(GTK_LABEL(label), TRUE);
+    gtk_widget_add_css_class(label, "monospace");
+    gtk_box_append(GTK_BOX(box), label);
+    break;
+  }
+
   case CMARK_NODE_HEADING: {
     GtkWidget *label;
     cmark_node *heading_child = cmark_node_first_child(node);
@@ -286,7 +296,8 @@ parse_markdown(md_t *ctx, const char *markdown)
 }
 
 static void
-clear_md(md_t *ctx) {
+clear_md(md_t *ctx)
+{
   g_clear_pointer(&ctx->root_path, g_free);
   g_clear_pointer(&ctx->toc, toc_free);
   g_clear_pointer(&ctx->html, html_free);
