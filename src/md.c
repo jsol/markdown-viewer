@@ -12,7 +12,8 @@
 #define OBJ_DATA_IMG "image"
 
 struct md {
-  GtkScrolledWindow *scroll;
+  GtkScrolledWindow *content_scroll;
+  GtkScrolledWindow *toc_scroll;
   GtkWidget *box;
   gchar *root_path;
   listener_t *listener;
@@ -144,6 +145,53 @@ monitor_image_changes(GFileMonitor *monitor,
 }
 
 static void
+display_formatted_text(md_t *ctx, GString *text, cmark_node *node)
+{
+  while (node) {
+    switch (cmark_node_get_type(node)) {
+    case CMARK_NODE_TEXT: {
+      gchar *escaped_text;
+
+      escaped_text = g_markup_escape_text(cmark_node_get_literal(node), -1);
+      g_string_append(text, escaped_text);
+      g_free(escaped_text);
+      break;
+    }
+    case CMARK_NODE_EMPH: {
+      cmark_node *child = cmark_node_first_child(node);
+
+      g_string_append(text, "<i>");
+      display_formatted_text(ctx, text, child);
+      g_string_append(text, "</i>");
+      break;
+    }
+
+    case CMARK_NODE_STRONG: {
+      cmark_node *child = cmark_node_first_child(node);
+
+      g_string_append(text, "<b>");
+      display_formatted_text(ctx, text, child);
+      g_string_append(text, "</b>");
+      break;
+    }
+
+    case CMARK_NODE_LINEBREAK:
+      g_string_append(text, "\n\n");
+      break;
+    case CMARK_NODE_SOFTBREAK:
+      g_string_append(text, "\n");
+      break;
+    default:
+      g_message("Unhandled node type in style lead: %s",
+                cmark_node_get_type_string(node));
+      break;
+    }
+
+    node = cmark_node_next(node);
+  }
+}
+
+static void
 display_paragraph(md_t *ctx, cmark_node *node, GtkWidget *box)
 {
   cmark_node *child = cmark_node_first_child(node);
@@ -174,6 +222,16 @@ display_paragraph(md_t *ctx, cmark_node *node, GtkWidget *box)
       break;
     }
 
+    case CMARK_NODE_CODE: {
+      gchar *escaped_text =
+              g_markup_escape_text(cmark_node_get_literal(child), -1);
+      g_string_append(paragraph_text, "<tt>");
+      g_string_append(paragraph_text, escaped_text);
+      g_string_append(paragraph_text, "</tt>");
+      g_free(escaped_text);
+      break;
+    }
+
     case CMARK_NODE_TEXT: {
       gchar *escaped_text =
               g_markup_escape_text(cmark_node_get_literal(child), -1);
@@ -182,11 +240,29 @@ display_paragraph(md_t *ctx, cmark_node *node, GtkWidget *box)
       break;
     }
 
-    case CMARK_NODE_SOFTBREAK:
-    case CMARK_NODE_LINEBREAK: {
-      g_string_append(paragraph_text, "\n");
+    case CMARK_NODE_EMPH: {
+      g_string_append(paragraph_text, "<i>");
+      display_formatted_text(ctx, paragraph_text, child);
+      g_string_append(paragraph_text, "</i>");
       break;
     }
+
+    case CMARK_NODE_STRONG: {
+      cmark_node *emph_child = cmark_node_first_child(child);
+      g_string_append(paragraph_text, "<b>");
+
+      display_formatted_text(ctx, paragraph_text, emph_child);
+      g_string_append(paragraph_text, "</b>");
+      break;
+    }
+
+    case CMARK_NODE_LINEBREAK:
+      g_string_append(paragraph_text, "\n\n");
+      break;
+
+    case CMARK_NODE_SOFTBREAK:
+      g_string_append(paragraph_text, "\n");
+      break;
 
     case CMARK_NODE_INLINE_HTML: {
       if (allowed_html(cmark_node_get_literal(child))) {
@@ -195,7 +271,8 @@ display_paragraph(md_t *ctx, cmark_node *node, GtkWidget *box)
       break;
     }
     default:
-      g_message("Unhandled node type: %s", cmark_node_get_type_string(child));
+      g_message("Unhandled node type in paragraph: %s",
+                cmark_node_get_type_string(child));
       break;
     }
     child = cmark_node_next(child);
@@ -308,6 +385,7 @@ static void
 handle_markdown(listener_t *listener, const gchar *markdown, gpointer user_data)
 {
   md_t *ctx = user_data;
+  GtkWidget *toc_box;
 
   g_print("Parsing markdown file: %s\n", listener_get_file_path(listener));
 
@@ -318,25 +396,32 @@ handle_markdown(listener_t *listener, const gchar *markdown, gpointer user_data)
   ctx->box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
   ctx->image_monitors = g_ptr_array_new_with_free_func(g_object_unref);
 
-  ctx->toc = toc_new();
-  ctx->html = html_new();
-
   gtk_box_set_homogeneous(GTK_BOX(ctx->box), FALSE);
   gtk_widget_set_halign(ctx->box, GTK_ALIGN_START);
   gtk_widget_set_margin_start(ctx->box, 20);
   gtk_widget_set_margin_end(ctx->box, 20);
-  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(ctx->scroll), ctx->box);
+  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(ctx->content_scroll),
+                                ctx->box);
 
+  toc_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+  gtk_widget_set_halign(toc_box, GTK_ALIGN_START);
+  gtk_widget_set_margin_top(toc_box, 20);
+  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(ctx->toc_scroll), toc_box);
+
+  ctx->toc = toc_new(toc_box);
+  ctx->html = html_new();
   g_print("Initiating parsing: %s\n", listener_get_file_path(listener));
   parse_markdown(ctx, markdown);
 }
 
 md_t *
-md_new(listener_t *listener, GtkScrolledWindow *scroll)
+md_new(listener_t *listener, GtkScrolledWindow *scroll, GtkScrolledWindow *toc)
 {
   md_t *md = g_new0(md_t, 1);
 
-  md->scroll = g_object_ref(scroll);
+  md->content_scroll = g_object_ref(scroll);
+  md->toc_scroll = g_object_ref(toc);
+
   md->listener = listener;
 
   md->image_monitors = g_ptr_array_new_with_free_func(g_object_unref);

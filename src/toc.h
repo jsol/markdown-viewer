@@ -4,7 +4,7 @@
 
 typedef struct _toc toc_t;
 
-toc_t *toc_new(void);
+toc_t *toc_new(GtkWidget *sidebar);
 
 gboolean toc_is_empty(toc_t *toc);
 

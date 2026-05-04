@@ -14,6 +14,8 @@ struct app_ctx {
 
   GtkWidget *window;
   GtkWidget *scroll;
+  GtkWidget *toc;
+  GtkWidget *view;
   GPtrArray *file_listeners;
 
   md_t *md;
@@ -135,7 +137,9 @@ open_cb(GApplication *self,
         g_warning("Multiple markdown files found");
         continue;
       }
-      ctx->md = md_new(listener, GTK_SCROLLED_WINDOW(ctx->scroll));
+      ctx->md = md_new(listener,
+                       GTK_SCROLLED_WINDOW(ctx->scroll),
+                       GTK_SCROLLED_WINDOW(ctx->toc));
     }
   }
 
@@ -147,7 +151,9 @@ open_cb(GApplication *self,
     listener = listener_new(markdown_file, handle_run_comment, ctx);
     g_ptr_array_add(ctx->file_listeners, listener);
 
-    ctx->md = md_new(listener, GTK_SCROLLED_WINDOW(ctx->scroll));
+    ctx->md = md_new(listener,
+                     GTK_SCROLLED_WINDOW(ctx->scroll),
+                     GTK_SCROLLED_WINDOW(ctx->toc));
 
     g_clear_object(&markdown_file);
   }
@@ -176,26 +182,102 @@ setup_styles(void)
                                              GTK_STYLE_PROVIDER_PRIORITY_USER);
 }
 
+static GtkWidget *
+setup_sidebar(struct app_ctx *ctx)
+{
+  GtkWidget *sidebar;
+
+  sidebar = gtk_scrolled_window_new();
+  gtk_scrolled_window_set_max_content_height(GTK_SCROLLED_WINDOW(sidebar), -1);
+  gtk_widget_set_vexpand(sidebar, TRUE);
+  gtk_widget_set_margin_top(sidebar, 40);
+
+  ctx->toc = g_object_ref_sink(sidebar);
+
+  return sidebar;
+}
+
+static void
+collapse_cb(GtkWidget *button, struct app_ctx *ctx)
+{
+  adw_overlay_split_view_set_collapsed(ADW_OVERLAY_SPLIT_VIEW(ctx->view),
+                                       !adw_overlay_split_view_get_collapsed(
+                                               ADW_OVERLAY_SPLIT_VIEW(
+                                                       ctx->view)));
+
+  if (adw_overlay_split_view_get_collapsed(ADW_OVERLAY_SPLIT_VIEW(ctx->view))) {
+    gtk_button_set_icon_name(GTK_BUTTON(button), "go-next-symbolic");
+  } else {
+    gtk_button_set_icon_name(GTK_BUTTON(button), "go-previous-symbolic");
+  }
+}
+
+static GtkWidget *
+setup_content(struct app_ctx *ctx)
+{
+  GtkWidget *content;
+  GtkWidget *header;
+  GtkWidget *scroll;
+  GtkWidget *collapse_button;
+
+  content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+
+  header = adw_header_bar_new();
+
+  collapse_button = gtk_button_new();
+  g_signal_connect(collapse_button, "clicked", G_CALLBACK(collapse_cb), ctx);
+
+  gtk_button_set_icon_name(GTK_BUTTON(collapse_button), "go-next-symbolic");
+  adw_header_bar_pack_start(ADW_HEADER_BAR(header), collapse_button);
+
+  gtk_box_append(GTK_BOX(content), header);
+
+  scroll = gtk_scrolled_window_new();
+  gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(scroll), 300);
+  gtk_scrolled_window_set_max_content_height(GTK_SCROLLED_WINDOW(scroll), -1);
+  gtk_widget_set_vexpand(scroll, TRUE);
+  gtk_box_append(GTK_BOX(content), scroll);
+
+  ctx->scroll = g_object_ref_sink(scroll);
+
+  return content;
+}
+
+static GtkWidget *
+setup_split_view(struct app_ctx *ctx)
+{
+  GtkWidget *view;
+  GtkWidget *sidebar;
+  GtkWidget *content;
+
+  view = adw_overlay_split_view_new();
+
+  sidebar = setup_sidebar(ctx);
+  content = setup_content(ctx);
+
+  adw_overlay_split_view_set_sidebar(ADW_OVERLAY_SPLIT_VIEW(view), sidebar);
+  adw_overlay_split_view_set_content(ADW_OVERLAY_SPLIT_VIEW(view), content);
+
+  adw_overlay_split_view_set_collapsed(ADW_OVERLAY_SPLIT_VIEW(view), TRUE);
+
+  ctx->view = g_object_ref_sink(view);
+
+  return view;
+}
+
 static void
 activate_cb(GtkApplication *app, gpointer user_data)
 {
-  GtkWidget *window = adw_application_window_new(app);
-  GtkWidget *scroll = NULL;
   struct app_ctx *ctx = user_data;
+  GtkWidget *window = adw_application_window_new(app);
+  GtkWidget *view;
 
   setup_styles();
-  scroll = gtk_scrolled_window_new();
-  gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(scroll), 300);
 
-  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),
-                                 GTK_POLICY_AUTOMATIC,
-                                 GTK_POLICY_ALWAYS);
-
-  gtk_scrolled_window_set_max_content_height(GTK_SCROLLED_WINDOW(scroll), -1);
-
-  adw_application_window_set_content(ADW_APPLICATION_WINDOW(window), scroll);
   ctx->window = g_object_ref_sink(window);
-  ctx->scroll = g_object_ref_sink(scroll);
+  view = setup_split_view(ctx);
+
+  adw_application_window_set_content(ADW_APPLICATION_WINDOW(window), view);
 
   gtk_window_set_default_size(GTK_WINDOW(window), 1200, 600);
   gtk_window_present(GTK_WINDOW(window));
