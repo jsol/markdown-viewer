@@ -110,7 +110,7 @@ static void setup_run_cmd(listener_t *ctx, const gchar *prefix) {
 }
 
 listener_t *listener_new(GFile *file, listener_approved_cb cb,
-                         listener_md_cb md_cb, gpointer user_data) {
+                         gpointer user_data) {
   listener_t *listener = g_new0(listener_t, 1);
 
   listener->file = g_object_ref(file);
@@ -118,12 +118,7 @@ listener_t *listener_new(GFile *file, listener_approved_cb cb,
   listener->monitor =
       g_file_monitor_file(file, G_FILE_MONITOR_NONE, NULL, NULL);
 
-  if (listener_is_md(listener)) {
-    listener->md_cb = md_cb;
-    if (g_file_query_exists(file, NULL)) {
-      g_idle_add_once(read_md, listener);
-    }
-  } else {
+  if (!listener_is_md(listener)) {
     listener->cb = cb;
   }
 
@@ -138,6 +133,13 @@ listener_t *listener_new(GFile *file, listener_approved_cb cb,
                    listener);
 
   return listener;
+}
+
+void listener_set_md_cb(listener_t *ctx, listener_md_cb md_cb) {
+  ctx->md_cb = md_cb;
+  if (g_file_query_exists(ctx->file, NULL)) {
+    g_idle_add_once(read_md, ctx);
+  }
 }
 
 void listener_approve_run(listener_t *ctx) {

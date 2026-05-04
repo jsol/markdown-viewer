@@ -34,6 +34,8 @@ sources = (
     'html.c',
     'main.c',
     'toc.c',
+    'listener.c',
+    'md.c',
   ]
 )
 
