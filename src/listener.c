@@ -14,10 +14,14 @@ struct listener {
 
   gchar *run_cmd;
   gboolean approved;
+  GSubprocess *subprocess;
+  guint queue_id;
 };
 
 static gchar *run_exts[] = { ".yaml", ".puml", NULL };
 static gchar *run_prefix[] = { "#!", "'!", NULL };
+
+static void run_command(listener_t *ctx);
 
 static gchar *
 change_ext_to_md(const gchar *input)
@@ -37,18 +41,82 @@ change_ext_to_md(const gchar *input)
 }
 
 static void
-run_command(listener_t *ctx)
+cmd_ready(G_GNUC_UNUSED GObject *source_object,
+          GAsyncResult *res,
+          gpointer user_data)
 {
   GError *error = NULL;
+  listener_t *ctx = user_data;
 
-  if (!ctx->run_cmd || !ctx->approved) {
-    return;
-  }
-
-  if (!g_spawn_command_line_async(ctx->run_cmd, &error)) {
+  if (!g_subprocess_wait_check_finish(ctx->subprocess, res, &error)) {
     g_printerr("Failed to run command: %s\n", error->message);
     g_error_free(error);
   }
+  g_clear_object(&ctx->subprocess);
+}
+
+static gboolean
+run_command_timeout(gpointer user_data)
+{
+  listener_t *ctx = user_data;
+
+  if (ctx->subprocess) {
+    g_message("Still running command: %s", ctx->run_cmd);
+    return TRUE;
+  }
+
+  g_message("Command finished: %s", ctx->run_cmd);
+  ctx->queue_id = 0;
+  run_command(ctx);
+
+  return FALSE;
+}
+
+static void
+run_command(listener_t *ctx)
+{
+  GError *error = NULL;
+  gchar **argv = NULL;
+
+  if (!ctx->run_cmd || !ctx->approved) {
+    g_message("Not running command: %s", ctx->run_cmd);
+    return;
+  }
+
+  if (ctx->subprocess) {
+    g_message("Already running command: %s", ctx->run_cmd);
+
+    if (ctx->queue_id) {
+      g_message("Already queued command: %s", ctx->run_cmd);
+      return;
+    }
+
+    ctx->queue_id = g_timeout_add_seconds(2, run_command_timeout, ctx);
+
+    return;
+  }
+
+  if (!g_shell_parse_argv(ctx->run_cmd, NULL, &argv, &error)) {
+    g_printerr("Failed to parse command: %s\n", error->message);
+    g_error_free(error);
+    return;
+  }
+
+  ctx->subprocess = g_subprocess_newv((const gchar *const*) argv,
+                                      G_SUBPROCESS_FLAGS_NONE,
+                                      &error);
+
+  g_strfreev(argv);
+
+  if (!ctx->subprocess) {
+    g_printerr("Failed to run command: %s\n", error->message);
+    g_error_free(error);
+
+    return;
+  }
+  g_message("Running command: %s", ctx->run_cmd);
+
+  g_subprocess_wait_check_async(ctx->subprocess, NULL, cmd_ready, ctx);
 }
 
 static void
@@ -178,7 +246,7 @@ listener_approve_run(listener_t *ctx)
   gchar *output = NULL;
   gchar *cmd = NULL;
 
-  if (!ctx->approved) {
+  if (ctx->approved) {
     return;
   }
 

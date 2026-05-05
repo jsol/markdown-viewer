@@ -1,0 +1,14 @@
+#!/bin/bash convert.sh $INPUT $OUTPUT
+list:
+  - one
+  - two
+  - three
+  - four
+  - five
+images:
+  Example1:
+    - Bob -> Alice
+    - Alice -> John
+  Example2:
+    - Client -> Server
+    - Server -> Database

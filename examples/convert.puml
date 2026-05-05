@@ -1,0 +1,9 @@
+'!plantuml /home/jens/git/github.com/jsol/markdown-viewer/examples/convert.puml
+@startuml Example1
+Bob -> Alice
+Alice -> John
+@enduml
+@startuml Example2
+Client -> Server
+Server -> Database
+@enduml
