@@ -1,11 +1,9 @@
-#include "gio/gio.h"
-#include "glib-object.h"
 #include <adwaita.h>
 #include <gdk/gdk.h>
 #include <glib.h>
 #include <glib/gstdio.h>
+#include <gio/gio.h>
 
-#include "gtk/gtk.h"
 #include "listener.h"
 #include "md.h"
 
@@ -118,48 +116,6 @@ handle_run_comment(listener_t *listener,
 }
 
 static void
-open_cb(GApplication *self,
-        gpointer files_pointer,
-        gint n_files,
-        G_GNUC_UNUSED gchar *hint,
-        gpointer user_data)
-{
-  GFile **files = (GFile **) files_pointer;
-  struct app_ctx *ctx = user_data;
-
-  g_application_activate(self);
-
-  for (gint i = 0; i < n_files; i++) {
-    listener_t *listener = listener_new(files[i], handle_run_comment, ctx);
-    g_ptr_array_add(ctx->file_listeners, listener);
-    if (listener_is_md(listener)) {
-      if (ctx->md) {
-        g_warning("Multiple markdown files found");
-        continue;
-      }
-      ctx->md = md_new(listener,
-                       GTK_SCROLLED_WINDOW(ctx->scroll),
-                       GTK_SCROLLED_WINDOW(ctx->toc));
-    }
-  }
-
-  if (!ctx->md) {
-    GFile *markdown_file;
-    listener_t *listener;
-
-    markdown_file = listener_get_output_file(ctx->file_listeners->pdata[0]);
-    listener = listener_new(markdown_file, handle_run_comment, ctx);
-    g_ptr_array_add(ctx->file_listeners, listener);
-
-    ctx->md = md_new(listener,
-                     GTK_SCROLLED_WINDOW(ctx->scroll),
-                     GTK_SCROLLED_WINDOW(ctx->toc));
-
-    g_clear_object(&markdown_file);
-  }
-}
-
-static void
 setup_styles(void)
 {
   GtkCssProvider *provider;
@@ -172,7 +128,7 @@ setup_styles(void)
           ".heading-5{font-size: medium; font-weight: bold;} "
           ".heading-6{font-size: medium; font-weight: bold;} "
           ".monospace{font-family: monospace;} "
-          ".table-header{background-color: #AAAAAA; }";
+          ".table-header{background-color: #AAAAAA; font-weight: bold;}";
 
   provider = gtk_css_provider_new();
   display = gdk_display_get_default();
@@ -281,6 +237,78 @@ activate_cb(GtkApplication *app, gpointer user_data)
 
   gtk_window_set_default_size(GTK_WINDOW(window), 1200, 600);
   gtk_window_present(GTK_WINDOW(window));
+}
+
+static void
+process_file(GFile *file, struct app_ctx *ctx)
+{
+  listener_t *listener = listener_new(file, handle_run_comment, ctx);
+  g_ptr_array_add(ctx->file_listeners, listener);
+  if (listener_is_md(listener)) {
+    if (ctx->md) {
+      g_warning("Multiple markdown files found");
+      return;
+    }
+    ctx->md = md_new(listener,
+                     GTK_SCROLLED_WINDOW(ctx->scroll),
+                     GTK_SCROLLED_WINDOW(ctx->toc));
+  }
+}
+
+static void
+process_directory(GFile *dir, struct app_ctx *ctx)
+{
+  GDir *directory;
+  const gchar *filename;
+
+  directory = g_dir_open(g_file_peek_path(dir), 0, NULL);
+
+  while ((filename = g_dir_read_name(directory)) != NULL) {
+    GFile *file = g_file_new_for_path(
+            g_build_filename(g_file_peek_path(dir), filename, NULL));
+
+    if (g_file_test(g_file_peek_path(file), G_FILE_TEST_IS_DIR)) {
+      process_directory(file, ctx);
+      g_clear_object(&file);
+      continue;
+    }
+
+    process_file(file, ctx);
+
+    g_clear_object(&file);
+  }
+}
+
+static void
+open_cb(GApplication *self,
+        gpointer files_pointer,
+        gint n_files,
+        G_GNUC_UNUSED gchar *hint,
+        gpointer user_data)
+{
+  GFile **files = (GFile **) files_pointer;
+  struct app_ctx *ctx = user_data;
+
+  g_application_activate(self);
+
+  for (gint i = 0; i < n_files; i++) {
+    if (g_file_test(g_file_peek_path(files[i]), G_FILE_TEST_IS_DIR)) {
+      process_directory(files[i], ctx);
+      continue;
+    }
+
+    process_file(files[i], ctx);
+  }
+
+  if (!ctx->md) {
+    GFile *markdown_file;
+
+    markdown_file = listener_get_output_file(ctx->file_listeners->pdata[0]);
+
+    process_file(markdown_file, ctx);
+
+    g_clear_object(&markdown_file);
+  }
 }
 
 int

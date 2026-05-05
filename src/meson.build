@@ -25,7 +25,7 @@ cmark = dependency('libcmark', required: false)
 if cmark.found()
   deps += cmark
 else
-  deps += dependency('libcmark-gfm', required: true, static: true)
+  deps += dependency('libcmark-gfm', required: true)
   extra_cflags += '-DUSE_GFM'
 endif
 

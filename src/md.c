@@ -1,13 +1,11 @@
+#include <glib.h>
 #include "md.h"
 #include "html.h"
 #include "listener.h"
 #include "toc.h"
 
-#ifdef USE_GFM
 #include <cmark-gfm.h>
-#else
-#include <cmark.h>
-#endif
+#include <cmark-gfm-core-extensions.h>
 
 #define OBJ_DATA_IMG "image"
 
@@ -21,6 +19,8 @@ struct md {
   toc_t *toc;
   html_t *html;
 };
+
+static void display_list(md_t *ctx, cmark_node *list_node, GtkWidget *box);
 
 static void
 print_node(cmark_node *node, int indent)
@@ -270,6 +270,27 @@ display_paragraph(md_t *ctx, cmark_node *node, GtkWidget *box)
       }
       break;
     }
+
+    case CMARK_NODE_LIST: {
+      GtkWidget *list_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+
+      g_message("Encountered list in paragraph, creating new box for it");
+      if (paragraph_text->len > 0) {
+        GtkWidget *label = gtk_label_new(paragraph_text->str);
+        gtk_label_set_wrap(GTK_LABEL(label), TRUE);
+        gtk_label_set_use_markup(GTK_LABEL(label), TRUE);
+        gtk_widget_set_halign(label, GTK_ALIGN_START);
+        gtk_box_append(GTK_BOX(box), label);
+
+        g_string_set_size(paragraph_text, 0);
+      }
+
+      display_list(ctx, child, list_box);
+      gtk_widget_set_margin_start(list_box, 20);
+      gtk_box_append(GTK_BOX(box), list_box);
+      break;
+    }
+
     default:
       g_message("Unhandled node type in paragraph: %s",
                 cmark_node_get_type_string(child));
@@ -287,6 +308,138 @@ display_paragraph(md_t *ctx, cmark_node *node, GtkWidget *box)
   }
 
   g_string_free(paragraph_text, TRUE);
+}
+
+static void
+display_table_row(cmark_node *node,
+                  guint8 *align,
+                  guint num_col,
+                  gint row,
+                  gboolean header,
+                  GtkWidget *table)
+{
+  cmark_node *child = cmark_node_first_child(node);
+  guint col = 0;
+
+  while (child) {
+    cmark_node *header_cell_child = cmark_node_first_child(child);
+    GtkWidget *label = gtk_label_new(cmark_node_get_literal(header_cell_child));
+    GtkWidget *frame = gtk_frame_new(NULL);
+
+    gtk_frame_set_child(GTK_FRAME(frame), label);
+
+    gtk_widget_set_hexpand(label, TRUE);
+
+    if (col >= num_col) {
+      g_message("More header cells than columns in table");
+      break;
+    }
+
+    switch (align[col]) {
+    case 0:
+    case 'l':
+      gtk_widget_set_halign(label, GTK_ALIGN_START);
+      break;
+    case 'c':
+      gtk_widget_set_halign(label, GTK_ALIGN_CENTER);
+      break;
+    case 'r':
+      gtk_widget_set_halign(label, GTK_ALIGN_END);
+      break;
+    }
+
+    if (header) {
+      gtk_widget_add_css_class(frame, "table-header");
+    }
+
+    gtk_grid_attach(GTK_GRID(table), frame, col, row, 1, 1);
+    child = cmark_node_next(child);
+    col++;
+  }
+}
+
+static void
+display_table(cmark_node *node, GtkWidget *box)
+{
+  cmark_node *child = cmark_node_first_child(node);
+
+  GtkWidget *table = gtk_grid_new();
+  guint8 *alignments = cmark_gfm_extensions_get_table_alignments(node);
+  guint num_cols = cmark_gfm_extensions_get_table_columns(node);
+  gint row_count = 0;
+
+  while (child) {
+    const gchar *name = cmark_node_get_type_string(child);
+    if (g_strcmp0(name, "table_header") == 0) {
+      display_table_row(child, alignments, num_cols, row_count, TRUE, table);
+    } else if (g_strcmp0(name, "table_row") == 0) {
+      display_table_row(child, alignments, num_cols, row_count, FALSE, table);
+    } else {
+      g_message("Unknown table child: %s", name);
+    }
+    row_count++;
+    child = cmark_node_next(child);
+  }
+
+  gtk_box_append(GTK_BOX(box), table);
+}
+
+static void
+display_list(md_t *ctx, cmark_node *list_node, GtkWidget *box)
+{
+  cmark_node *child = cmark_node_first_child(list_node);
+  GtkGrid *grid = NULL;
+
+  cmark_list_type list_type = cmark_node_get_list_type(list_node);
+  gboolean is_ordered = list_type == CMARK_BULLET_LIST ? FALSE : TRUE;
+  guint64 num = cmark_node_get_list_start(list_node);
+
+  grid = GTK_GRID(gtk_grid_new());
+
+  gtk_grid_set_row_spacing(grid, 5);
+  gtk_grid_set_column_spacing(grid, 5);
+  gtk_grid_set_column_homogeneous(grid, FALSE);
+
+  gtk_box_append(GTK_BOX(box), GTK_WIDGET(grid));
+
+  while (child) {
+    if (cmark_node_get_type(child) == CMARK_NODE_ITEM) {
+      GtkWidget *item_prefix_label = gtk_label_new(
+              is_ordered ? g_strdup_printf("%" G_GUINT64_FORMAT ".", num) :
+                           "•");
+      gtk_widget_set_halign(item_prefix_label, GTK_ALIGN_END);
+      gtk_widget_set_valign(item_prefix_label, GTK_ALIGN_START);
+      gtk_grid_attach(grid, item_prefix_label, 0, num, 1, 1);
+
+      cmark_node *item_child = cmark_node_first_child(child);
+      GtkWidget *item_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+      while (item_child) {
+        switch (cmark_node_get_type(item_child)) {
+        case CMARK_NODE_PARAGRAPH: {
+          g_message("Displaying list item %" G_GUINT64_FORMAT, num);
+          display_paragraph(ctx, item_child, item_box);
+          break;
+        }
+        case CMARK_NODE_LIST: {
+          GtkWidget *sublist_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+          g_message("Displaying sublist in list item %" G_GUINT64_FORMAT, num);
+          display_list(ctx, item_child, sublist_box);
+          gtk_box_append(GTK_BOX(item_box), sublist_box);
+          break;
+        }
+        default:
+          g_message("Unknown list item child: %s",
+                    cmark_node_get_type_string(item_child));
+        }
+        item_child = cmark_node_next(item_child);
+      }
+      gtk_grid_attach(grid, item_box, 1, num, 1, 1);
+      num++;
+    } else {
+      g_message("Unknown list child: %s", cmark_node_get_type_string(child));
+    }
+    child = cmark_node_next(child);
+  }
 }
 
 static void
@@ -349,6 +502,15 @@ display_markdown(md_t *ctx, cmark_node *node, GtkWidget *box)
     display_paragraph(ctx, node, paragraph_box);
     break;
   }
+
+  case CMARK_NODE_LIST: {
+    GtkWidget *list_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    gtk_box_append(GTK_BOX(box), list_box);
+
+    display_list(ctx, node, list_box);
+    break;
+  }
+
   case CMARK_NODE_DOCUMENT:
     while (child) {
       display_markdown(ctx, child, box);
@@ -357,6 +519,11 @@ display_markdown(md_t *ctx, cmark_node *node, GtkWidget *box)
     break;
 
   default:
+
+    if (g_strcmp0(cmark_node_get_type_string(node), "table") == 0) {
+      display_table(node, box);
+      break;
+    }
     break;
   }
 }
@@ -364,8 +531,19 @@ display_markdown(md_t *ctx, cmark_node *node, GtkWidget *box)
 static void
 parse_markdown(md_t *ctx, const char *markdown)
 {
-  cmark_node *doc =
-          cmark_parse_document(markdown, strlen(markdown), CMARK_OPT_DEFAULT);
+  cmark_parser *parser = cmark_parser_new(CMARK_OPT_DEFAULT);
+  cmark_gfm_core_extensions_ensure_registered();
+  cmark_syntax_extension *syntax_extension =
+          cmark_find_syntax_extension("table");
+  if (!syntax_extension) {
+    g_warning("Unknown extension %s\n", "table");
+  }
+
+  cmark_parser_attach_syntax_extension(parser, syntax_extension);
+
+  cmark_parser_feed(parser, markdown, strlen(markdown));
+
+  cmark_node *doc = cmark_parser_finish(parser);
 
   print_node(doc, 0);
   display_markdown(ctx, doc, ctx->box);
