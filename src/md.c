@@ -326,8 +326,9 @@ display_paragraph(md_t *ctx, cmark_node *node, GtkWidget *box)
     default:
 
       if (g_strcmp0(cmark_node_get_type_string(child), "strikethrough") == 0) {
+        cmark_node *strike_child = cmark_node_first_child(child);
         g_string_append(paragraph_text, "<s>");
-        display_formatted_text(ctx, paragraph_text, child);
+        display_formatted_text(ctx, paragraph_text, strike_child);
         g_string_append(paragraph_text, "</s>");
         break;
       }
@@ -461,7 +462,7 @@ display_list(md_t *ctx, cmark_node *list_node, GtkWidget *box)
       }
 
       item_prefix_label = gtk_label_new(item_prefix);
-      gtk_widget_set_halign(item_prefix_label, GTK_ALIGN_END);
+      gtk_widget_set_halign(item_prefix_label, GTK_ALIGN_START);
       gtk_widget_set_valign(item_prefix_label, GTK_ALIGN_START);
       gtk_grid_attach(grid, item_prefix_label, 0, num, 1, 1);
 

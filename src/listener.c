@@ -12,6 +12,7 @@ struct listener {
   listener_md_cb md_cb;
   gpointer md_user_data;
 
+  gchar *original_run_cmd;
   gchar *run_cmd;
   gboolean approved;
   GSubprocess *subprocess;
@@ -102,7 +103,7 @@ run_command(listener_t *ctx)
     return;
   }
 
-  ctx->subprocess = g_subprocess_newv((const gchar *const*) argv,
+  ctx->subprocess = g_subprocess_newv((const gchar *const *) argv,
                                       G_SUBPROCESS_FLAGS_NONE,
                                       &error);
 
@@ -192,10 +193,10 @@ setup_run_cmd(listener_t *ctx, const gchar *prefix)
     return;
   }
 
-  ctx->run_cmd = g_strdup(line + strlen(prefix));
+  ctx->original_run_cmd = g_strdup(line + strlen(prefix));
 
-  g_strstrip(ctx->run_cmd);
-  ctx->cb(ctx, ctx->run_cmd, ctx->user_data);
+  g_strstrip(ctx->original_run_cmd);
+  ctx->cb(ctx, ctx->original_run_cmd, ctx->user_data);
   g_free(line);
 }
 
@@ -251,7 +252,7 @@ listener_approve_run(listener_t *ctx)
   }
 
   ctx->approved = TRUE;
-  cmd_str = g_string_new(ctx->run_cmd);
+  cmd_str = g_string_new(ctx->original_run_cmd);
 
   output = change_ext_to_md(g_file_peek_path(ctx->file));
 
@@ -274,7 +275,7 @@ listener_is_md(listener_t *listener)
 const gchar *
 listener_get_run_cmd(listener_t *listener)
 {
-  return listener->run_cmd;
+  return listener->original_run_cmd;
 }
 
 const gchar *
@@ -307,6 +308,7 @@ listener_free(listener_t *listener)
 
   listener->approved = FALSE;
   g_free(listener->run_cmd);
+  g_free(listener->original_run_cmd);
   g_clear_object(&listener->monitor);
   g_clear_object(&listener->file);
   g_free(listener);

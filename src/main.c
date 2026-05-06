@@ -7,6 +7,8 @@
 #include "listener.h"
 #include "md.h"
 
+#define OBJ_DATA_CTX "app-ctx"
+
 struct app_ctx {
   gchar id[4];
 
@@ -16,7 +18,111 @@ struct app_ctx {
   GtkWidget *view;
   GPtrArray *file_listeners;
   GPtrArray *md;
+
+  GPtrArray *approved_run_cmds;
 };
+
+static GFile *
+get_approved_run_cmds_file(void)
+{
+  gchar *path = NULL;
+  GFile *file = NULL;
+
+  path = g_build_filename(g_get_user_config_dir(),
+                          "markdown-viewer",
+                          "approved-run-commands.txt",
+                          NULL);
+
+  const gchar *parent = g_path_get_dirname(path);
+  if (g_mkdir_with_parents(parent, 0755) < 0) {
+    g_warning("Failed to create directory %s\n", parent);
+    return NULL;
+  }
+
+  file = g_file_new_for_path(path);
+
+  g_free(path);
+
+  return file;
+}
+
+static void
+load_approved_run_cmds(struct app_ctx *ctx)
+{
+  GError *error = NULL;
+  GFile *file = NULL;
+  GFileInputStream *stream = NULL;
+  GDataInputStream *data_stream = NULL;
+  gchar *line = NULL;
+
+  ctx->approved_run_cmds =
+          g_ptr_array_new_with_free_func((GDestroyNotify) g_free);
+
+  file = get_approved_run_cmds_file();
+  if (!file) {
+    return;
+  }
+
+  stream = g_file_read(file, NULL, &error);
+  if (!stream) {
+    g_warning("Failed to open file %s for reading: %s",
+              g_file_peek_path(file),
+              error->message);
+    g_clear_error(&error);
+
+    goto cleanup;
+  }
+
+  data_stream = g_data_input_stream_new(G_INPUT_STREAM(stream));
+
+  while ((line = g_data_input_stream_read_line(data_stream,
+                                               NULL,
+                                               NULL,
+                                               &error))) {
+    g_strstrip(line);
+    g_ptr_array_add(ctx->approved_run_cmds, line);
+  }
+
+cleanup:
+  g_clear_object(&data_stream);
+  g_clear_object(&stream);
+  g_clear_object(&file);
+}
+
+static void
+save_approved_run_cmds(struct app_ctx *ctx)
+{
+  GFile *file = NULL;
+  GFileOutputStream *stream = NULL;
+  GError *error = NULL;
+
+  file = get_approved_run_cmds_file();
+  if (!file) {
+    return;
+  }
+
+  stream = g_file_replace(file, NULL, FALSE, G_FILE_CREATE_NONE, NULL, &error);
+  if (!stream) {
+    g_warning("Failed to open file %s for writing: %s",
+              g_file_peek_path(file),
+              error->message);
+    g_clear_error(&error);
+    goto cleanup;
+  }
+
+  for (guint i = 0; i < ctx->approved_run_cmds->len; i++) {
+    g_output_stream_write(G_OUTPUT_STREAM(stream),
+                          ctx->approved_run_cmds->pdata[i],
+                          strlen(ctx->approved_run_cmds->pdata[i]),
+                          NULL,
+                          NULL);
+    g_output_stream_write(G_OUTPUT_STREAM(stream), "\n", 1, NULL, NULL);
+  }
+
+cleanup:
+  g_clear_object(&stream);
+  g_clear_object(&file);
+}
 
 static void
 show_no_run_comment(struct app_ctx *ctx, const gchar *path)
@@ -37,14 +143,29 @@ show_no_run_comment(struct app_ctx *ctx, const gchar *path)
 }
 
 static void
-run_dialog_response_cb(G_GNUC_UNUSED AdwDialog *dialog,
+run_dialog_response_cb(AdwDialog *dialog,
                        const char *response,
                        gpointer user_data)
 {
   listener_t *listener = user_data;
+  struct app_ctx *ctx;
 
   if (g_strcmp0(response, "run") == 0) {
     listener_approve_run(listener);
+
+    ctx = g_object_get_data(G_OBJECT(dialog), OBJ_DATA_CTX);
+
+    const gchar *cmd = listener_get_run_cmd(listener);
+
+    for (guint i = 0; i < ctx->approved_run_cmds->len; i++) {
+      if (g_strcmp0(cmd, ctx->approved_run_cmds->pdata[i]) == 0) {
+        return;
+      }
+    }
+
+    g_ptr_array_add(ctx->approved_run_cmds, g_strdup(cmd));
+
+    save_approved_run_cmds(ctx);
   }
 }
 
@@ -77,6 +198,8 @@ show_run_comment(struct app_ctx *ctx,
   adw_alert_dialog_set_default_response(ADW_ALERT_DIALOG(dialog), "cancel");
   adw_alert_dialog_set_close_response(ADW_ALERT_DIALOG(dialog), "cancel");
 
+  g_object_set_data(G_OBJECT(dialog), OBJ_DATA_CTX, ctx);
+
   g_signal_connect(dialog,
                    "response",
                    G_CALLBACK(run_dialog_response_cb),
@@ -93,6 +216,14 @@ handle_run_comment(listener_t *listener,
                    gpointer user_data)
 {
   struct app_ctx *ctx = user_data;
+
+  for (guint i = 0; i < ctx->approved_run_cmds->len; i++) {
+    if (g_strcmp0(run_cmd, ctx->approved_run_cmds->pdata[i]) == 0) {
+      g_message("Pre-approved %s", run_cmd);
+      listener_approve_run(listener);
+      return;
+    }
+  }
 
   if (run_cmd == NULL) {
     show_no_run_comment(ctx, listener_get_file_path(listener));
@@ -123,6 +254,19 @@ setup_styles(void)
   gtk_style_context_add_provider_for_display(display,
                                              GTK_STYLE_PROVIDER(provider),
                                              GTK_STYLE_PROVIDER_PRIORITY_USER);
+}
+
+static void
+process_file(GFile *file, struct app_ctx *ctx)
+{
+  md_t *md;
+  listener_t *listener = listener_new(file, handle_run_comment, ctx);
+  g_ptr_array_add(ctx->file_listeners, listener);
+  if (listener_is_md(listener)) {
+    md = md_new(listener, GTK_BOX(ctx->content), GTK_BOX(ctx->toc));
+
+    g_ptr_array_add(ctx->md, md);
+  }
 }
 
 static GtkWidget *
@@ -159,18 +303,74 @@ collapse_cb(GtkWidget *button, struct app_ctx *ctx)
   }
 }
 
+static void
+file_select_cb(GObject *dialog, GAsyncResult *result, gpointer user_data)
+{
+  GFile *file;
+  GError *error = NULL;
+
+  file = gtk_file_dialog_open_finish(GTK_FILE_DIALOG(dialog), result, &error);
+
+  if (file) {
+    g_message("Opened file: %s", g_file_peek_path(file));
+    process_file(file, user_data);
+    g_object_unref(file);
+  }
+}
+
+static void
+menu_open_cb(G_GNUC_UNUSED GSimpleAction *action,
+             G_GNUC_UNUSED GVariant *parameter,
+             gpointer user_data)
+{
+  struct app_ctx *ctx = user_data;
+  GtkFileDialog *dialog;
+
+  dialog = gtk_file_dialog_new();
+  gtk_file_dialog_open(dialog,
+                       GTK_WINDOW(ctx->window),
+                       NULL,
+                       file_select_cb,
+                       ctx);
+}
+
+static void
+build_menu(GtkWidget *menu_button, GtkApplication *app, struct app_ctx *ctx)
+{
+  GMenu *menu_bar;
+  GMenuItem *item;
+  GSimpleAction *action;
+
+  menu_bar = g_menu_new();
+
+  item = g_menu_item_new("Open", "app.open");
+  g_menu_append_item(menu_bar, item);
+  g_object_unref(item);
+
+  action = g_simple_action_new("open", NULL);
+  g_action_map_add_action(G_ACTION_MAP(app), G_ACTION(action));
+  g_signal_connect(action, "activate", G_CALLBACK(menu_open_cb), ctx);
+
+  gtk_menu_button_set_menu_model(GTK_MENU_BUTTON(menu_button),
+                                 G_MENU_MODEL(menu_bar));
+}
+
 static GtkWidget *
-setup_content(struct app_ctx *ctx)
+setup_content(struct app_ctx *ctx, GtkApplication *app)
 {
   GtkWidget *content;
   GtkWidget *header;
   GtkWidget *scroll;
   GtkWidget *collapse_button;
   GtkWidget *pages;
+  GtkWidget *menu_button;
 
-  content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-
+  content = adw_toolbar_view_new();
   header = adw_header_bar_new();
+  menu_button = gtk_menu_button_new();
+
+  build_menu(menu_button, app, ctx);
+  adw_header_bar_pack_end(ADW_HEADER_BAR(header), menu_button);
 
   collapse_button = gtk_button_new();
   g_signal_connect(collapse_button, "clicked", G_CALLBACK(collapse_cb), ctx);
@@ -178,13 +378,13 @@ setup_content(struct app_ctx *ctx)
   gtk_button_set_icon_name(GTK_BUTTON(collapse_button), "go-next-symbolic");
   adw_header_bar_pack_start(ADW_HEADER_BAR(header), collapse_button);
 
-  gtk_box_append(GTK_BOX(content), header);
+  adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(content), header);
 
   scroll = gtk_scrolled_window_new();
   gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(scroll), 300);
   gtk_scrolled_window_set_max_content_height(GTK_SCROLLED_WINDOW(scroll), -1);
   gtk_widget_set_vexpand(scroll, TRUE);
-  gtk_box_append(GTK_BOX(content), scroll);
+  adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(content), scroll);
 
   pages = gtk_box_new(GTK_ORIENTATION_VERTICAL, 40);
 
@@ -196,7 +396,7 @@ setup_content(struct app_ctx *ctx)
 }
 
 static GtkWidget *
-setup_split_view(struct app_ctx *ctx)
+setup_split_view(struct app_ctx *ctx, GtkApplication *app)
 {
   GtkWidget *view;
   GtkWidget *sidebar;
@@ -205,7 +405,7 @@ setup_split_view(struct app_ctx *ctx)
   view = adw_overlay_split_view_new();
 
   sidebar = setup_sidebar(ctx);
-  content = setup_content(ctx);
+  content = setup_content(ctx, app);
 
   adw_overlay_split_view_set_sidebar(ADW_OVERLAY_SPLIT_VIEW(view), sidebar);
   adw_overlay_split_view_set_content(ADW_OVERLAY_SPLIT_VIEW(view), content);
@@ -227,25 +427,12 @@ activate_cb(GtkApplication *app, gpointer user_data)
   setup_styles();
 
   ctx->window = g_object_ref_sink(window);
-  view = setup_split_view(ctx);
+  view = setup_split_view(ctx, app);
 
   adw_application_window_set_content(ADW_APPLICATION_WINDOW(window), view);
 
   gtk_window_set_default_size(GTK_WINDOW(window), 1200, 600);
   gtk_window_present(GTK_WINDOW(window));
-}
-
-static void
-process_file(GFile *file, struct app_ctx *ctx)
-{
-  md_t *md;
-  listener_t *listener = listener_new(file, handle_run_comment, ctx);
-  g_ptr_array_add(ctx->file_listeners, listener);
-  if (listener_is_md(listener)) {
-    md = md_new(listener, GTK_BOX(ctx->content), GTK_BOX(ctx->toc));
-
-    g_ptr_array_add(ctx->md, md);
-  }
 }
 
 static void
@@ -318,6 +505,8 @@ main(int argc, char **argv)
     g_printerr("Usage: %s <files-to-watch>\n", argv[0]);
     return 1;
   }
+
+  load_approved_run_cmds(&ctx);
 
   ctx.md = g_ptr_array_new_with_free_func((GDestroyNotify) md_free);
   ctx.file_listeners =

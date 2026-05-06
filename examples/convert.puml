@@ -1,4 +1,4 @@
-'!plantuml /home/jens/git/github.com/jsol/markdown-viewer/examples/convert.puml
+'!plantuml $INPUT
 @startuml Example1
 Bob -> Alice
 Alice -> John

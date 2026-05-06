@@ -13,7 +13,7 @@ done
 
 PUML="${1%.yaml}.puml"
 
-echo "'!plantuml $PUML" > "$PUML.tmp"
+echo "'!plantuml \$INPUT" > "$PUML.tmp"
 
 IN=$(yq ".images | keys[]" "$1")
 
