@@ -8,7 +8,7 @@
 struct _toc {
   GtkWidget *table;
   GtkWidget *sidebar;
-  gint heading_counts[6];
+  gint heading_counts[7];
 };
 
 static void

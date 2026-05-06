@@ -1,5 +1,6 @@
 #include <glib.h>
 #include "md.h"
+#include "gtk/gtk.h"
 #include "html.h"
 #include "listener.h"
 #include "toc.h"
@@ -10,9 +11,10 @@
 #define OBJ_DATA_IMG "image"
 
 struct md {
-  GtkScrolledWindow *content_scroll;
-  GtkScrolledWindow *toc_scroll;
+  GtkWidget *content_parent;
+  GtkWidget *toc_parent;
   GtkWidget *box;
+  GtkWidget *toc_box;
   gchar *root_path;
   listener_t *listener;
   GPtrArray *image_monitors;
@@ -182,6 +184,15 @@ display_formatted_text(md_t *ctx, GString *text, cmark_node *node)
       g_string_append(text, "\n");
       break;
     default:
+
+      if (g_strcmp0(cmark_node_get_type_string(node), "strikethrough") == 0) {
+        cmark_node *child = cmark_node_first_child(node);
+        g_string_append(text, "<s>");
+        display_formatted_text(ctx, text, child);
+        g_string_append(text, "</s>");
+        break;
+      }
+
       g_message("Unhandled node type in style lead: %s",
                 cmark_node_get_type_string(node));
       break;
@@ -271,6 +282,27 @@ display_paragraph(md_t *ctx, cmark_node *node, GtkWidget *box)
       break;
     }
 
+    case CMARK_NODE_LINK: {
+      if (paragraph_text->len > 0) {
+        GtkWidget *label = gtk_label_new(paragraph_text->str);
+        gtk_label_set_wrap(GTK_LABEL(label), TRUE);
+        gtk_label_set_use_markup(GTK_LABEL(label), TRUE);
+        gtk_widget_set_halign(label, GTK_ALIGN_START);
+        gtk_box_append(GTK_BOX(box), label);
+
+        g_string_set_size(paragraph_text, 0);
+      }
+      GtkWidget *link_button;
+      cmark_node *link_child = cmark_node_first_child(child);
+      link_button = gtk_link_button_new_with_label(cmark_node_get_url(child),
+                                                   cmark_node_get_literal(
+                                                           link_child));
+
+      gtk_widget_set_halign(link_button, GTK_ALIGN_START);
+      gtk_box_append(GTK_BOX(box), link_button);
+      break;
+    }
+
     case CMARK_NODE_LIST: {
       GtkWidget *list_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
 
@@ -292,6 +324,13 @@ display_paragraph(md_t *ctx, cmark_node *node, GtkWidget *box)
     }
 
     default:
+
+      if (g_strcmp0(cmark_node_get_type_string(child), "strikethrough") == 0) {
+        g_string_append(paragraph_text, "<s>");
+        display_formatted_text(ctx, paragraph_text, child);
+        g_string_append(paragraph_text, "</s>");
+        break;
+      }
       g_message("Unhandled node type in paragraph: %s",
                 cmark_node_get_type_string(child));
       break;
@@ -404,9 +443,24 @@ display_list(md_t *ctx, cmark_node *list_node, GtkWidget *box)
 
   while (child) {
     if (cmark_node_get_type(child) == CMARK_NODE_ITEM) {
-      GtkWidget *item_prefix_label = gtk_label_new(
-              is_ordered ? g_strdup_printf("%" G_GUINT64_FORMAT ".", num) :
-                           "•");
+      gchar *item_prefix = NULL;
+      GtkWidget *item_prefix_label;
+
+      item_prefix =
+              is_ordered ? g_strdup_printf("%" G_GUINT64_FORMAT ".", num) : "•";
+
+      if (g_strcmp0(cmark_node_get_type_string(child), "tasklist") == 0) {
+        gboolean item_checked = FALSE;
+        item_checked = cmark_gfm_extensions_get_tasklist_item_checked(child);
+
+        if (item_checked) {
+          item_prefix = g_strdup_printf("%s ✅", item_prefix);
+        } else {
+          item_prefix = g_strdup_printf("%s ☐", item_prefix);
+        }
+      }
+
+      item_prefix_label = gtk_label_new(item_prefix);
       gtk_widget_set_halign(item_prefix_label, GTK_ALIGN_END);
       gtk_widget_set_valign(item_prefix_label, GTK_ALIGN_START);
       gtk_grid_attach(grid, item_prefix_label, 0, num, 1, 1);
@@ -511,6 +565,12 @@ display_markdown(md_t *ctx, cmark_node *node, GtkWidget *box)
     break;
   }
 
+  case CMARK_NODE_THEMATIC_BREAK: {
+    GtkWidget *separator = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+    gtk_box_append(GTK_BOX(box), separator);
+    break;
+  }
+
   case CMARK_NODE_DOCUMENT:
     while (child) {
       display_markdown(ctx, child, box);
@@ -531,15 +591,19 @@ display_markdown(md_t *ctx, cmark_node *node, GtkWidget *box)
 static void
 parse_markdown(md_t *ctx, const char *markdown)
 {
+  const gchar *extensions[] = { "table", "strikethrough", "tasklist", NULL };
   cmark_parser *parser = cmark_parser_new(CMARK_OPT_DEFAULT);
   cmark_gfm_core_extensions_ensure_registered();
-  cmark_syntax_extension *syntax_extension =
-          cmark_find_syntax_extension("table");
-  if (!syntax_extension) {
-    g_warning("Unknown extension %s\n", "table");
-  }
+  cmark_syntax_extension *syntax_extension;
 
-  cmark_parser_attach_syntax_extension(parser, syntax_extension);
+  for (int i = 0; extensions[i] != NULL; i++) {
+    syntax_extension = cmark_find_syntax_extension(extensions[i]);
+    if (!syntax_extension) {
+      g_warning("Unknown extension %s\n", extensions[i]);
+      continue;
+    }
+    cmark_parser_attach_syntax_extension(parser, syntax_extension);
+  }
 
   cmark_parser_feed(parser, markdown, strlen(markdown));
 
@@ -560,10 +624,29 @@ clear_md(md_t *ctx)
 }
 
 static void
+set_sidebar_title(md_t *ctx, listener_t *listener)
+{
+  gchar *title;
+  gchar *basename;
+  GtkWidget *title_label;
+
+  basename = g_path_get_basename(listener_get_file_path(listener));
+
+  title = g_strdup_printf("<b>%s:</b>", basename);
+
+  title_label = gtk_label_new(title);
+
+  gtk_label_set_use_markup(GTK_LABEL(title_label), TRUE);
+  gtk_widget_set_halign(title_label, GTK_ALIGN_START);
+  gtk_widget_set_margin_start(title_label, 20);
+
+  gtk_box_insert_child_after(GTK_BOX(ctx->toc_box), title_label, NULL);
+}
+
+static void
 handle_markdown(listener_t *listener, const gchar *markdown, gpointer user_data)
 {
   md_t *ctx = user_data;
-  GtkWidget *toc_box;
 
   g_print("Parsing markdown file: %s\n", listener_get_file_path(listener));
 
@@ -571,34 +654,59 @@ handle_markdown(listener_t *listener, const gchar *markdown, gpointer user_data)
 
   ctx->root_path = g_path_get_dirname(listener_get_file_path(listener));
 
-  ctx->box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+  if (ctx->box) {
+    GtkWidget *old_box;
+    GtkWidget *new_box;
+
+    old_box = ctx->box;
+    new_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_box_insert_child_after(GTK_BOX(ctx->content_parent), new_box, old_box);
+    gtk_box_remove(GTK_BOX(ctx->content_parent), old_box);
+    ctx->box = new_box;
+  } else {
+    ctx->box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_box_append(GTK_BOX(ctx->content_parent), ctx->box);
+  }
+
+  if (ctx->toc_box) {
+    GtkWidget *old_box;
+    GtkWidget *new_box;
+
+    old_box = ctx->toc_box;
+    new_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    gtk_box_insert_child_after(GTK_BOX(ctx->toc_parent), new_box, old_box);
+    gtk_box_remove(GTK_BOX(ctx->toc_parent), old_box);
+    ctx->toc_box = new_box;
+  } else {
+    ctx->toc_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    gtk_box_append(GTK_BOX(ctx->toc_parent), ctx->toc_box);
+  }
+
   ctx->image_monitors = g_ptr_array_new_with_free_func(g_object_unref);
 
   gtk_box_set_homogeneous(GTK_BOX(ctx->box), FALSE);
   gtk_widget_set_halign(ctx->box, GTK_ALIGN_START);
   gtk_widget_set_margin_start(ctx->box, 20);
   gtk_widget_set_margin_end(ctx->box, 20);
-  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(ctx->content_scroll),
-                                ctx->box);
 
-  toc_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-  gtk_widget_set_halign(toc_box, GTK_ALIGN_START);
-  gtk_widget_set_margin_top(toc_box, 20);
-  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(ctx->toc_scroll), toc_box);
+  gtk_widget_set_halign(ctx->toc_box, GTK_ALIGN_START);
+  gtk_widget_set_margin_top(ctx->toc_box, 20);
 
-  ctx->toc = toc_new(toc_box);
+  ctx->toc = toc_new(ctx->toc_box);
   ctx->html = html_new();
   g_print("Initiating parsing: %s\n", listener_get_file_path(listener));
+
+  set_sidebar_title(ctx, listener);
   parse_markdown(ctx, markdown);
 }
 
 md_t *
-md_new(listener_t *listener, GtkScrolledWindow *scroll, GtkScrolledWindow *toc)
+md_new(listener_t *listener, GtkBox *content, GtkBox *toc)
 {
   md_t *md = g_new0(md_t, 1);
 
-  md->content_scroll = g_object_ref(scroll);
-  md->toc_scroll = g_object_ref(toc);
+  md->content_parent = GTK_WIDGET(g_object_ref(content));
+  md->toc_parent = GTK_WIDGET(g_object_ref(toc));
 
   md->listener = listener;
 

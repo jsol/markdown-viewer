@@ -11,40 +11,41 @@ struct app_ctx {
   gchar id[4];
 
   GtkWidget *window;
-  GtkWidget *scroll;
+  GtkWidget *content;
   GtkWidget *toc;
   GtkWidget *view;
   GPtrArray *file_listeners;
-
-  md_t *md;
+  GPtrArray *md;
 };
 
 static void
 show_no_run_comment(struct app_ctx *ctx, const gchar *path)
 {
-  AdwDialog *dialog = adw_dialog_new();
+  AdwDialog *dialog;
   gchar *text;
+  gchar *title;
 
-  GtkWidget *label;
-
+  title = g_strdup_printf("No Run command found for %s",
+                          g_path_get_basename(path));
   text = g_strdup_printf("The file %s needs to contain a #!<command> comment "
                          "to be executed. use $INPUT for a path to the raw "
                          "file and $OUTPUT for the path to the output md file.",
                          path);
 
-  label = gtk_label_new(text);
-
-  adw_dialog_set_title(dialog, "No run comment found");
-  gtk_label_set_wrap(GTK_LABEL(label), TRUE);
-
-  gtk_widget_set_halign(label, GTK_ALIGN_START);
-  gtk_widget_set_margin_start(label, 20);
-  gtk_widget_set_margin_end(label, 20);
-  gtk_widget_set_margin_top(label, 20);
-  gtk_widget_set_margin_bottom(label, 20);
-
-  adw_dialog_set_child(dialog, label);
+  dialog = adw_alert_dialog_new(title, text);
   adw_dialog_present(dialog, ctx->window);
+}
+
+static void
+run_dialog_response_cb(G_GNUC_UNUSED AdwDialog *dialog,
+                       const char *response,
+                       gpointer user_data)
+{
+  listener_t *listener = user_data;
+
+  if (g_strcmp0(response, "run") == 0) {
+    listener_approve_run(listener);
+  }
 }
 
 static void
@@ -52,52 +53,38 @@ show_run_comment(struct app_ctx *ctx,
                  const gchar *run_cmd,
                  listener_t *listener)
 {
-  AdwDialog *dialog = adw_dialog_new();
-  GtkWidget *button_yes = NULL;
-  GtkWidget *button_no = NULL;
-  GtkWidget *grid;
+  AdwDialog *dialog;
 
-  adw_dialog_set_title(dialog, "Allow run command");
+  gchar *text;
+  gchar *title;
 
-  gchar *text =
-          g_strdup_printf("Do you wish to run \"%s\" to transform this file?",
-                          run_cmd);
+  text = g_strdup_printf("Do you wish to run \"%s\" to transform this file?",
+                         run_cmd);
 
-  GtkWidget *label = gtk_label_new(text);
-  gtk_label_set_wrap(GTK_LABEL(label), TRUE);
+  title = g_strdup_printf("Run command found for %s",
+                          g_path_get_basename(
+                                  listener_get_file_path(listener)));
 
-  button_yes = gtk_button_new_with_label("Yes");
-  button_no = gtk_button_new_with_label("No");
+  dialog = adw_alert_dialog_new(title, text);
 
-  grid = gtk_grid_new();
-  gtk_grid_set_column_spacing(GTK_GRID(grid), 10);
+  adw_alert_dialog_add_responses(ADW_ALERT_DIALOG(dialog),
+                                 "cancel",
+                                 "Cancel",
+                                 "run",
+                                 "Run",
+                                 NULL);
 
-  gtk_widget_set_halign(label, GTK_ALIGN_START);
-  gtk_widget_set_margin_start(label, 20);
-  gtk_widget_set_margin_end(label, 20);
-  gtk_widget_set_margin_top(label, 20);
-  gtk_widget_set_margin_bottom(label, 20);
+  adw_alert_dialog_set_default_response(ADW_ALERT_DIALOG(dialog), "cancel");
+  adw_alert_dialog_set_close_response(ADW_ALERT_DIALOG(dialog), "cancel");
 
-  gtk_grid_attach(GTK_GRID(grid), label, 0, 0, 2, 1);
-  gtk_grid_attach(GTK_GRID(grid), button_yes, 0, 1, 1, 1);
-  gtk_grid_attach(GTK_GRID(grid), button_no, 1, 1, 1, 1);
-
-  adw_dialog_set_child(dialog, grid);
-
-  g_signal_connect_swapped(button_yes,
-                           "clicked",
-                           G_CALLBACK(listener_approve_run),
-                           listener);
-  g_signal_connect_swapped(button_yes,
-                           "clicked",
-                           G_CALLBACK(adw_dialog_close),
-                           dialog);
-  g_signal_connect_swapped(button_no,
-                           "clicked",
-                           G_CALLBACK(adw_dialog_close),
-                           dialog);
+  g_signal_connect(dialog,
+                   "response",
+                   G_CALLBACK(run_dialog_response_cb),
+                   listener);
 
   adw_dialog_present(dialog, ctx->window);
+  g_free(text);
+  g_free(title);
 }
 
 static void
@@ -142,13 +129,17 @@ static GtkWidget *
 setup_sidebar(struct app_ctx *ctx)
 {
   GtkWidget *sidebar;
+  GtkWidget *pages;
 
   sidebar = gtk_scrolled_window_new();
   gtk_scrolled_window_set_max_content_height(GTK_SCROLLED_WINDOW(sidebar), -1);
   gtk_widget_set_vexpand(sidebar, TRUE);
   gtk_widget_set_margin_top(sidebar, 40);
 
-  ctx->toc = g_object_ref_sink(sidebar);
+  pages = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+  ctx->toc = g_object_ref_sink(pages);
+
+  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(sidebar), pages);
 
   return sidebar;
 }
@@ -175,6 +166,7 @@ setup_content(struct app_ctx *ctx)
   GtkWidget *header;
   GtkWidget *scroll;
   GtkWidget *collapse_button;
+  GtkWidget *pages;
 
   content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 
@@ -194,7 +186,11 @@ setup_content(struct app_ctx *ctx)
   gtk_widget_set_vexpand(scroll, TRUE);
   gtk_box_append(GTK_BOX(content), scroll);
 
-  ctx->scroll = g_object_ref_sink(scroll);
+  pages = gtk_box_new(GTK_ORIENTATION_VERTICAL, 40);
+
+  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroll), pages);
+
+  ctx->content = g_object_ref_sink(pages);
 
   return content;
 }
@@ -242,16 +238,13 @@ activate_cb(GtkApplication *app, gpointer user_data)
 static void
 process_file(GFile *file, struct app_ctx *ctx)
 {
+  md_t *md;
   listener_t *listener = listener_new(file, handle_run_comment, ctx);
   g_ptr_array_add(ctx->file_listeners, listener);
   if (listener_is_md(listener)) {
-    if (ctx->md) {
-      g_warning("Multiple markdown files found");
-      return;
-    }
-    ctx->md = md_new(listener,
-                     GTK_SCROLLED_WINDOW(ctx->scroll),
-                     GTK_SCROLLED_WINDOW(ctx->toc));
+    md = md_new(listener, GTK_BOX(ctx->content), GTK_BOX(ctx->toc));
+
+    g_ptr_array_add(ctx->md, md);
   }
 }
 
@@ -300,7 +293,7 @@ open_cb(GApplication *self,
     process_file(files[i], ctx);
   }
 
-  if (!ctx->md) {
+  if (ctx->md->len == 0) {
     GFile *markdown_file;
 
     markdown_file = listener_get_output_file(ctx->file_listeners->pdata[0]);
@@ -326,9 +319,10 @@ main(int argc, char **argv)
     return 1;
   }
 
+  ctx.md = g_ptr_array_new_with_free_func((GDestroyNotify) md_free);
   ctx.file_listeners =
           g_ptr_array_new_with_free_func((GDestroyNotify) listener_free);
-  app = adw_application_new("com.example.MarkdownParser",
+  app = adw_application_new("com.github.jsol.markdownviewer",
                             G_APPLICATION_HANDLES_OPEN);
   g_signal_connect(app, "open", G_CALLBACK(open_cb), &ctx);
   g_signal_connect(app, "activate", G_CALLBACK(activate_cb), &ctx);

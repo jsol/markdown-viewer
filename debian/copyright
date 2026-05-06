@@ -1,0 +1,9 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Source: https://www.github.com/jsol/markdown-viewer
+Upstream-Name: Markdown Viewer
+Upstream-Contact: Jens Olsson <jens@rootsy.nu>
+
+Files:
+ *
+Copyright: 2026 Jens Olsson
+License: MIT

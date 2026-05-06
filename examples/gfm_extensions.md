@@ -1,4 +1,4 @@
-# GitHub Flavored Markdown - Tables
+# GitHub Flavored Markdown
 
 ## Simple table
 
@@ -7,9 +7,18 @@
 | Header      | Title       |
 | Paragraph   | Text        |
 
-## Alignment
+## Aligned table
 
 | Syntax      | Description | Test Text     |
 | :---        |    :----:   |          ---: |
 | Header      | Title       | Here's this   |
 | Paragraph   | Text        | And more      |
+
+## Strikethrough
+~~The world is flat.~~ The world is round.
+
+## Task Lists
+- [x] Write the press release
+- [ ] Update the website
+- [ ] Contact the media
+

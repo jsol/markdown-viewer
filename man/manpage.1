@@ -1,0 +1,22 @@
+.TH MARKDOWN_VIEWER 1
+.SH NAME
+markdown-viewer \- view markdown files
+.SH SYNOPSIS
+.B markdown-viewer
+.IR file[s]
+.SH DESCRIPTION
+.B markdown-viewer
+Markdown viewer renders selected parts of the markdown file in an Adwaita
+styled window. It automatically updates the rendered content when the file
+is changed on disk, so it can be used to preview markdown files while editing
+them. It also watches any rendered images for changes and updates them as well.
+.PP
+The most powerful feature is that it can watch non-markdown files and
+on change call a user defined command. This allows previews of files that are
+auto-generated from YAML documents (for now). By adding a #!<command> line
+to the top of the YAML file this conversion is activated. The command
+will substitute the string $INPUT for the path to the YAML file and $OUTPUT
+for the path to the generated md file. PlantUML diagrams can also be watched
+this way, adding the comment "'!plantuml $INPUT' to the top of the plantuml
+file.
+
