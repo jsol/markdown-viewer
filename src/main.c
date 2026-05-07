@@ -501,11 +501,6 @@ main(int argc, char **argv)
   ctx.id[1] = 'T';
   ctx.id[2] = 'X';
 
-  if (argc == 1) {
-    g_printerr("Usage: %s <files-to-watch>\n", argv[0]);
-    return 1;
-  }
-
   load_approved_run_cmds(&ctx);
 
   ctx.md = g_ptr_array_new_with_free_func((GDestroyNotify) md_free);

@@ -1,6 +1,7 @@
 #!/bin/bash
 
 NAME="markdown-viewer"
+FULLNAME="com.github.jsol.markdownviewer"
 VERSION=$(head -n 1 changelog | grep -Po '\d\.\d\.\d')
 BINARY="$1"
 TARGET="$2"
@@ -43,7 +44,7 @@ mv $NAME.1.gz "$TARGET/$NAME/usr/share/man/man1"
 
 # Add desktop entry
 mkdir -p "$TARGET/$NAME/usr/share/applications"
-cp com.github.jsol.markdown-viewer.desktop "$TARGET/$NAME/usr/share/applications/com.github.jsol.markdown-viewer.desktop"
+cp "$FULLNAME.desktop" "$TARGET/$NAME/usr/share/applications/$FULLNAME.desktop"
 
 # Add icons
 mkdir -p "$TARGET/$NAME/usr/share/icons/hicolor"
@@ -51,8 +52,8 @@ for img in ../icons/*.png; do
 	img_name=$(basename "$img")
 	resolution=${img_name%.png}
 	folder_name="${resolution}x${resolution}"
-	mkdir -p "$TARGET/$NAME/usr/share/icons/hicolor/$folder_name"
-	cp "$img" "$TARGET/$NAME/usr/share/icons/hicolor/$folder_name/$NAME.png"
+	mkdir -p "$TARGET/$NAME/usr/share/icons/hicolor/$folder_name/apps"
+	cp "$img" "$TARGET/$NAME/usr/share/icons/hicolor/$folder_name/apps/$FULLNAME.png"
 done
 
 # Build the .deb package
