@@ -1,6 +1,6 @@
 FROM ubuntu:24.04
 
-RUN apt-get update && apt-get install -y git build-essential cmake ninja-build meson libgtk-4-dev libadwaita-1-dev  libcmark-gfm-extensions-dev  libcmark-gfm-dev
+RUN apt-get update && apt-get install -y git build-essential cmake ninja-build meson libgtk-4-dev libadwaita-1-dev  libcmark-gfm-extensions-dev  libcmark-gfm-dev lintian
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
