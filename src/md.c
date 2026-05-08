@@ -8,8 +8,8 @@
 #include <cmark-gfm.h>
 #include <cmark-gfm-core-extensions.h>
 
-#define OBJ_DATA_IMG "image"
-#define PRINT_DEBUG  TRUE
+#define OBJ_DATA_IMG_PATH "image"
+#define PRINT_DEBUG       TRUE
 
 struct md {
   GtkWidget *content_parent;
@@ -20,9 +20,10 @@ struct md {
   gint footnote_num;
   gchar *root_path;
   listener_t *listener;
-  GPtrArray *image_monitors;
   toc_t *toc;
   html_t *html;
+  GHashTable *image_listeners;
+  GPtrArray *current_images;
 };
 
 static void display_list(md_t *ctx, cmark_node *list_node, GtkWidget *box);
@@ -110,45 +111,6 @@ display_html_table(html_t *ctx, const char *html, GtkWidget *box)
   gtk_box_append(GTK_BOX(box), frame);
 }
 
-static GtkWidget *
-display_image(GFile *file, GtkWidget *old_image, GtkWidget *box)
-{
-  GtkWidget *image = gtk_picture_new_for_file(file);
-  gtk_picture_set_can_shrink(GTK_PICTURE(image), FALSE);
-  gtk_widget_set_halign(image, GTK_ALIGN_START);
-
-  if (old_image == NULL) {
-    gtk_box_append(GTK_BOX(box), g_object_ref(image));
-    return image;
-  }
-
-  gtk_box_insert_child_after(GTK_BOX(box), g_object_ref(image), old_image);
-  gtk_box_remove(GTK_BOX(box), old_image);
-
-  return image;
-}
-
-static void
-monitor_image_changes(GFileMonitor *monitor,
-                      GFile *file,
-                      G_GNUC_UNUSED GFile *other_file,
-                      GFileMonitorEvent event_type,
-                      G_GNUC_UNUSED gpointer user_data)
-{
-  if (event_type == G_FILE_MONITOR_EVENT_CHANGED ||
-      event_type == G_FILE_MONITOR_EVENT_CREATED) {
-    g_debug("Image changed: %s", g_file_peek_path(file));
-    GtkWidget *old_image = g_object_get_data(G_OBJECT(monitor), OBJ_DATA_IMG);
-
-    GtkWidget *new_image =
-            display_image(file, old_image, gtk_widget_get_parent(old_image));
-    g_object_set_data_full(G_OBJECT(monitor),
-                           OBJ_DATA_IMG,
-                           g_object_ref_sink(new_image),
-                           g_object_unref);
-  }
-}
-
 static void
 display_formatted_text(md_t *ctx, GString *text, cmark_node *node)
 {
@@ -206,6 +168,33 @@ display_formatted_text(md_t *ctx, GString *text, cmark_node *node)
 }
 
 static void
+handle_image_change(listener_t *listener, GdkTexture *data, gpointer user_data)
+{
+  md_t *ctx = user_data;
+
+  g_assert(ctx);
+  g_assert(data);
+
+  g_message("Received image change for %s", listener_get_file_path(listener));
+  for (guint i = 0; i < ctx->current_images->len; i++) {
+    GtkWidget *image = g_ptr_array_index(ctx->current_images, i);
+    GFile *image_path = g_object_get_data(G_OBJECT(image), OBJ_DATA_IMG_PATH);
+
+    if (!GTK_IS_PICTURE(image)) {
+      g_warning("Expected picture widget in current_images array");
+      continue;
+    }
+    if (g_strcmp0(g_file_peek_path(image_path),
+                  listener_get_file_path(listener)) != 0) {
+      continue;
+    }
+
+    g_message("Updating image widget for %s", listener_get_file_path(listener));
+    gtk_picture_set_paintable(GTK_PICTURE(image), GDK_PAINTABLE(data));
+  }
+}
+
+static void
 display_paragraph(md_t *ctx, cmark_node *node, GtkWidget *box)
 {
   cmark_node *child = cmark_node_first_child(node);
@@ -214,25 +203,35 @@ display_paragraph(md_t *ctx, cmark_node *node, GtkWidget *box)
   while (child) {
     switch (cmark_node_get_type(child)) {
     case CMARK_NODE_IMAGE: {
-      GFileMonitor *monitor = NULL;
-
+      listener_t *img_listener;
+      GtkWidget *image;
       GFile *url = normalize_url(ctx, cmark_node_get_url(child));
 
-      GtkWidget *image = display_image(url, NULL, box);
+      img_listener =
+              g_hash_table_lookup(ctx->image_listeners, g_file_peek_path(url));
 
-      monitor = g_file_monitor_file(url, G_FILE_MONITOR_NONE, NULL, NULL);
+      if (!img_listener) {
+        img_listener = listener_new(url);
+        g_hash_table_insert(ctx->image_listeners,
+                            g_strdup(g_file_peek_path(url)),
+                            img_listener);
+      }
 
-      g_object_set_data_full(G_OBJECT(monitor),
-                             OBJ_DATA_IMG,
-                             g_object_ref_sink(image),
-                             g_object_unref);
-      g_ptr_array_add(ctx->image_monitors, monitor);
-      g_signal_connect(monitor,
-                       "changed",
-                       G_CALLBACK(monitor_image_changes),
-                       NULL);
-      g_free(url);
+      image = gtk_picture_new();
 
+      gtk_picture_set_can_shrink(GTK_PICTURE(image), FALSE);
+      gtk_widget_set_halign(image, GTK_ALIGN_START);
+
+      g_object_set_data_full(G_OBJECT(image),
+                             OBJ_DATA_IMG_PATH,
+                             g_object_ref(url),
+                             (GDestroyNotify) g_object_unref);
+      g_ptr_array_add(ctx->current_images, g_object_ref_sink(image));
+      listener_set_img_cb(img_listener, handle_image_change, ctx);
+
+      gtk_box_append(GTK_BOX(box), image);
+
+      g_clear_object(&url);
       break;
     }
 
@@ -674,10 +673,10 @@ parse_markdown(md_t *ctx, const char *markdown)
 static void
 clear_md(md_t *ctx)
 {
+  g_clear_pointer(&ctx->current_images, g_ptr_array_unref);
   g_clear_pointer(&ctx->root_path, g_free);
   g_clear_pointer(&ctx->toc, toc_free);
   g_clear_pointer(&ctx->html, html_free);
-  g_clear_pointer(&ctx->image_monitors, g_ptr_array_unref);
 }
 
 static void
@@ -739,8 +738,6 @@ handle_markdown(listener_t *listener, const gchar *markdown, gpointer user_data)
     gtk_box_append(GTK_BOX(ctx->toc_parent), ctx->toc_box);
   }
 
-  ctx->image_monitors = g_ptr_array_new_with_free_func(g_object_unref);
-
   gtk_box_set_homogeneous(GTK_BOX(ctx->box), FALSE);
   gtk_widget_set_halign(ctx->box, GTK_ALIGN_START);
   gtk_widget_set_margin_start(ctx->box, 20);
@@ -751,6 +748,7 @@ handle_markdown(listener_t *listener, const gchar *markdown, gpointer user_data)
 
   ctx->toc = toc_new(ctx->toc_box);
   ctx->html = html_new();
+  ctx->current_images = g_ptr_array_new_with_free_func(g_object_unref);
 
   set_sidebar_title(ctx, listener);
   parse_markdown(ctx, markdown);
@@ -766,7 +764,10 @@ md_new(listener_t *listener, GtkBox *content, GtkBox *toc)
 
   md->listener = listener;
 
-  md->image_monitors = g_ptr_array_new_with_free_func(g_object_unref);
+  md->image_listeners = g_hash_table_new_full(g_str_hash,
+                                              g_str_equal,
+                                              g_free,
+                                              (GDestroyNotify) listener_free);
   md->root_path = g_path_get_dirname(listener_get_file_path(listener));
 
   listener_set_md_cb(listener, handle_markdown, md);
@@ -782,6 +783,7 @@ md_free(md_t *md)
   }
 
   clear_md(md);
+  g_clear_pointer(&md->image_listeners, g_hash_table_unref);
   g_free(md);
 
   return;

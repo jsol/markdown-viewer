@@ -5,15 +5,19 @@ struct listener {
   GFile *file;
   gchar *checksum;
 
+  /* For files that should be processed */
   listener_cmd_cb cmd_cb;
   gpointer cmd_user_data;
 
+  /* For markdown files */
   listener_md_cb md_cb;
   gpointer md_user_data;
 
+  /* For image files */
   listener_img_cb img_cb;
   gpointer img_user_data;
 
+  /** For command execution */
   gchar *original_run_cmd;
   GStrv run_cmd;
   gboolean approved;
@@ -119,6 +123,27 @@ read_md(gpointer data)
   g_free(markdown);
 }
 
+static void
+read_img(gpointer data)
+{
+  listener_t *ctx = data;
+  GdkTexture *texture = NULL;
+  GError *error = NULL;
+
+  texture = gdk_texture_new_from_file(ctx->file, &error);
+
+  if (!texture) {
+    g_warning("Failed to read image file %s: %s",
+              g_file_peek_path(ctx->file),
+              error->message);
+    g_clear_error(&error);
+    return;
+  }
+
+  ctx->img_cb(ctx, texture, ctx->img_user_data);
+  g_clear_object(&texture);
+}
+
 static gboolean
 checksum(listener_t *ctx, GFile *file)
 {
@@ -191,8 +216,10 @@ monitor_changes(G_GNUC_UNUSED GFileMonitor *monitor,
 
     if (ctx->md_cb) {
       read_md(ctx);
-    } else {
-      run_command(user_data);
+    } else if (ctx->cmd_cb) {
+      run_command(ctx);
+    } else if (ctx->img_cb) {
+      read_img(ctx);
     }
   } else {
     g_message("File event: %d for file: %s",
@@ -274,11 +301,26 @@ listener_set_cmd_cb(listener_t *ctx, listener_cmd_cb cmd_cb, gpointer user_data)
 void
 listener_set_md_cb(listener_t *ctx, listener_md_cb md_cb, gpointer user_data)
 {
+  g_return_if_fail(ctx != NULL);
+
   ctx->md_cb = md_cb;
   ctx->md_user_data = user_data;
 
   if (g_file_query_exists(ctx->file, NULL)) {
     g_idle_add_once(read_md, ctx);
+  }
+}
+
+void
+listener_set_img_cb(listener_t *ctx, listener_img_cb img_cb, gpointer user_data)
+{
+  g_return_if_fail(ctx != NULL);
+
+  ctx->img_cb = img_cb;
+  ctx->img_user_data = user_data;
+
+  if (g_file_query_exists(ctx->file, NULL)) {
+    g_idle_add_once(read_img, ctx);
   }
 }
 
@@ -360,5 +402,6 @@ listener_free(listener_t *listener)
   g_free(listener->original_run_cmd);
   g_clear_object(&listener->monitor);
   g_clear_object(&listener->file);
+  g_free(listener->checksum);
   g_free(listener);
 }
