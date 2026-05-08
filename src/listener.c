@@ -1,5 +1,3 @@
-
-
 #include "listener.h"
 
 struct listener {
@@ -13,10 +11,10 @@ struct listener {
   gpointer md_user_data;
 
   gchar *original_run_cmd;
-  gchar *run_cmd;
+  GStrv run_cmd;
   gboolean approved;
   GSubprocess *subprocess;
-  guint queue_id;
+  gboolean rerun;
 };
 
 static gchar *run_exts[] = { ".yaml", ".puml", NULL };
@@ -50,72 +48,49 @@ cmd_ready(G_GNUC_UNUSED GObject *source_object,
   listener_t *ctx = user_data;
 
   if (!g_subprocess_wait_check_finish(ctx->subprocess, res, &error)) {
-    g_printerr("Failed to run command: %s\n", error->message);
-    g_error_free(error);
+    g_warning("Failed to run command: %s", error->message);
+    g_clear_error(&error);
+    return;
   }
   g_clear_object(&ctx->subprocess);
-}
 
-static gboolean
-run_command_timeout(gpointer user_data)
-{
-  listener_t *ctx = user_data;
-
-  if (ctx->subprocess) {
-    g_message("Still running command: %s", ctx->run_cmd);
-    return TRUE;
+  if (ctx->rerun) {
+    ctx->rerun = FALSE;
+    run_command(ctx);
   }
-
-  g_message("Command finished: %s", ctx->run_cmd);
-  ctx->queue_id = 0;
-  run_command(ctx);
-
-  return FALSE;
 }
 
 static void
 run_command(listener_t *ctx)
 {
   GError *error = NULL;
-  gchar **argv = NULL;
 
   if (!ctx->run_cmd || !ctx->approved) {
-    g_message("Not running command: %s", ctx->run_cmd);
+    g_message("Not running command: %s",
+              ctx->original_run_cmd ? ctx->original_run_cmd : "NULL");
     return;
   }
 
   if (ctx->subprocess) {
-    g_message("Already running command: %s", ctx->run_cmd);
+    g_message("Already running command: %s", ctx->original_run_cmd);
 
-    if (ctx->queue_id) {
-      g_message("Already queued command: %s", ctx->run_cmd);
-      return;
-    }
-
-    ctx->queue_id = g_timeout_add_seconds(2, run_command_timeout, ctx);
+    ctx->rerun = TRUE;
 
     return;
   }
 
-  if (!g_shell_parse_argv(ctx->run_cmd, NULL, &argv, &error)) {
-    g_printerr("Failed to parse command: %s\n", error->message);
-    g_error_free(error);
-    return;
-  }
-
-  ctx->subprocess = g_subprocess_newv((const gchar *const *) argv,
+  ctx->subprocess = g_subprocess_newv((const gchar *const *) ctx->run_cmd,
                                       G_SUBPROCESS_FLAGS_NONE,
                                       &error);
 
-  g_strfreev(argv);
-
   if (!ctx->subprocess) {
-    g_printerr("Failed to run command: %s\n", error->message);
-    g_error_free(error);
+    g_warning("Failed to run command: %s", error->message);
+    g_clear_error(&error);
 
     return;
   }
-  g_message("Running command: %s", ctx->run_cmd);
+
+  g_message("Running command: %s", ctx->original_run_cmd);
 
   g_subprocess_wait_check_async(ctx->subprocess, NULL, cmd_ready, ctx);
 }
@@ -125,16 +100,17 @@ read_md(gpointer data)
 {
   listener_t *ctx = data;
   gchar *markdown = NULL;
+  GError *error = NULL;
   gsize len = 0;
 
-  g_print("Reading markdown file: %s\n", g_file_peek_path(ctx->file));
-
-  if (!g_file_load_contents(ctx->file, NULL, &markdown, &len, NULL, NULL)) {
-    g_printerr("Failed to read file: %s\n", g_file_peek_path(ctx->file));
+  if (!g_file_load_contents(ctx->file, NULL, &markdown, &len, NULL, &error)) {
+    g_warning("Failed to read file %s: %s",
+              g_file_peek_path(ctx->file),
+              error->message);
+    g_clear_error(&error);
     return;
   }
 
-  g_print("Read markdown file: %s\n", g_file_peek_path(ctx->file));
   ctx->md_cb(ctx, markdown, ctx->md_user_data);
   g_free(markdown);
 }
@@ -243,27 +219,34 @@ listener_set_md_cb(listener_t *ctx, listener_md_cb md_cb, gpointer user_data)
 void
 listener_approve_run(listener_t *ctx)
 {
-  GString *cmd_str = NULL;
+  GString *cmd = NULL;
   gchar *output = NULL;
-  gchar *cmd = NULL;
+  GError *error = NULL;
 
   if (ctx->approved) {
     return;
   }
 
   ctx->approved = TRUE;
-  cmd_str = g_string_new(ctx->original_run_cmd);
+  cmd = g_string_new(ctx->original_run_cmd);
 
   output = change_ext_to_md(g_file_peek_path(ctx->file));
 
-  g_string_replace(cmd_str, "$INPUT", g_file_peek_path(ctx->file), 0);
-  g_string_replace(cmd_str, "$OUTPUT", output, 0);
+  g_string_replace(cmd, "$INPUT", g_file_peek_path(ctx->file), 0);
+  g_string_replace(cmd, "$OUTPUT", output, 0);
 
-  cmd = g_string_free(cmd_str, FALSE);
+  if (ctx->run_cmd) {
+    g_strfreev(ctx->run_cmd);
+  }
 
-  g_free(ctx->run_cmd);
+  if (!g_shell_parse_argv(cmd->str, NULL, &ctx->run_cmd, &error)) {
+    g_warning("Failed to parse command: %s", error->message);
+    g_clear_error(&error);
+    ctx->run_cmd = NULL;
+  }
+
   g_free(output);
-  ctx->run_cmd = cmd;
+  g_string_free(cmd, TRUE);
 }
 
 gboolean
@@ -307,7 +290,7 @@ listener_free(listener_t *listener)
   }
 
   listener->approved = FALSE;
-  g_free(listener->run_cmd);
+  g_strfreev(listener->run_cmd);
   g_free(listener->original_run_cmd);
   g_clear_object(&listener->monitor);
   g_clear_object(&listener->file);

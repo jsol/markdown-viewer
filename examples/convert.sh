@@ -15,12 +15,12 @@ PUML="${1%.yaml}.puml"
 
 echo "'!plantuml \$INPUT" > "$PUML.tmp"
 
-IN=$(yq ".images | keys[]" "$1")
+IN=$(yq -r ".images | keys[]" "$1")
 
 for i in $IN; do
   echo "@startuml $i" >> "$PUML.tmp"
 
-  yq ".images.$i[]" "$1" >> "$PUML.tmp"
+  yq -r ".images.$i[]" "$1" >> "$PUML.tmp"
 
   echo "" >> "$2.tmp"
   echo "![$i](./$i.png)" >> "$2.tmp"

@@ -20,7 +20,7 @@ tbl_error(G_GNUC_UNUSED GMarkupParseContext *context,
           GError *error,
           G_GNUC_UNUSED gpointer user_data)
 {
-  g_printerr("Error parsing HTML: %s\n", error->message);
+  g_warning("Error parsing HTML: %s", error->message);
 }
 
 static void
@@ -33,7 +33,7 @@ tbl_start_element(G_GNUC_UNUSED GMarkupParseContext *context,
 {
   struct table_parse_ctx *ctx = (struct table_parse_ctx *) user_data;
 
-  g_message("Start element: %s", element_name);
+  g_debug("Start element: %s", element_name);
 
   if (g_strcmp0(element_name, "table") == 0) {
     ctx->table = gtk_grid_new();
@@ -104,7 +104,7 @@ tbl_end_element(G_GNUC_UNUSED GMarkupParseContext *context,
 {
   struct table_parse_ctx *ctx = (struct table_parse_ctx *) user_data;
 
-  g_message("End element: %s", element_name);
+  g_debug("End element: %s", element_name);
   if (g_strcmp0(element_name, "td") == 0 ||
       g_strcmp0(element_name, "th") == 0) {
     ctx->current_cell = NULL;
@@ -122,16 +122,16 @@ html_parse_table(html_t *ctx, const char *html)
 
   g_assert(html != NULL);
 
-  g_message("Parsing table HTML: %s", html);
+  g_debug("Parsing table HTML: %s", html);
 
   if (!g_markup_parse_context_parse(ctx->context, html, -1, &error)) {
-    g_printerr("Failed to parse HTML: %s\n", error->message);
+    g_warning("Failed to parse HTML: %s", error->message);
     g_clear_error(&error);
     return NULL;
   }
 
   if (ctx->table_ctx.active) {
-    g_message("Table parsing did not complete successfully.\n");
+    g_debug("Table parsing did not complete successfully.");
     return NULL;
   }
   return ctx->table_ctx.table;
@@ -140,7 +140,7 @@ html_parse_table(html_t *ctx, const char *html)
 GtkWidget *
 html_parse(html_t *ctx, const char *html)
 {
-  g_message("Parsing HTML: %s", html);
+  g_debug("Parsing HTML: %s", html);
   if (ctx->table_ctx.active || g_str_has_prefix(html, "<table")) {
     return html_parse_table(ctx, html);
   }
@@ -170,7 +170,7 @@ html_free(html_t *ctx)
     return;
   }
   if (!g_markup_parse_context_end_parse(ctx->context, &error)) {
-    g_warning("Error finalizing HTML parsing: %s\n", error->message);
+    g_warning("Error finalizing HTML parsing: %s", error->message);
     g_clear_error(&error);
   }
   g_markup_parse_context_free(ctx->context);

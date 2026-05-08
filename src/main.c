@@ -35,7 +35,7 @@ get_approved_run_cmds_file(void)
 
   const gchar *parent = g_path_get_dirname(path);
   if (g_mkdir_with_parents(parent, 0755) < 0) {
-    g_warning("Failed to create directory %s\n", parent);
+    g_warning("Failed to create directory %s", parent);
     return NULL;
   }
 

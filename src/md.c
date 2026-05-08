@@ -9,6 +9,7 @@
 #include <cmark-gfm-core-extensions.h>
 
 #define OBJ_DATA_IMG "image"
+#define PRINT_DEBUG  FALSE
 
 struct md {
   GtkWidget *content_parent;
@@ -134,7 +135,7 @@ monitor_image_changes(GFileMonitor *monitor,
 {
   if (event_type == G_FILE_MONITOR_EVENT_CHANGED ||
       event_type == G_FILE_MONITOR_EVENT_CREATED) {
-    g_message("Image changed: %s", g_file_peek_path(file));
+    g_debug("Image changed: %s", g_file_peek_path(file));
     GtkWidget *old_image = g_object_get_data(G_OBJECT(monitor), OBJ_DATA_IMG);
 
     GtkWidget *new_image =
@@ -306,7 +307,7 @@ display_paragraph(md_t *ctx, cmark_node *node, GtkWidget *box)
     case CMARK_NODE_LIST: {
       GtkWidget *list_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
 
-      g_message("Encountered list in paragraph, creating new box for it");
+      g_debug("Encountered list in paragraph, creating new box for it");
       if (paragraph_text->len > 0) {
         GtkWidget *label = gtk_label_new(paragraph_text->str);
         gtk_label_set_wrap(GTK_LABEL(label), TRUE);
@@ -371,7 +372,7 @@ display_table_row(cmark_node *node,
     gtk_widget_set_hexpand(label, TRUE);
 
     if (col >= num_col) {
-      g_message("More header cells than columns in table");
+      g_warning("More header cells than columns in table");
       break;
     }
 
@@ -415,7 +416,7 @@ display_table(cmark_node *node, GtkWidget *box)
     } else if (g_strcmp0(name, "table_row") == 0) {
       display_table_row(child, alignments, num_cols, row_count, FALSE, table);
     } else {
-      g_message("Unknown table child: %s", name);
+      g_warning("Unknown table child: %s", name);
     }
     row_count++;
     child = cmark_node_next(child);
@@ -471,13 +472,13 @@ display_list(md_t *ctx, cmark_node *list_node, GtkWidget *box)
       while (item_child) {
         switch (cmark_node_get_type(item_child)) {
         case CMARK_NODE_PARAGRAPH: {
-          g_message("Displaying list item %" G_GUINT64_FORMAT, num);
+          g_debug("Displaying list item %" G_GUINT64_FORMAT, num);
           display_paragraph(ctx, item_child, item_box);
           break;
         }
         case CMARK_NODE_LIST: {
           GtkWidget *sublist_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-          g_message("Displaying sublist in list item %" G_GUINT64_FORMAT, num);
+          g_debug("Displaying sublist in list item %" G_GUINT64_FORMAT, num);
           display_list(ctx, item_child, sublist_box);
           gtk_box_append(GTK_BOX(item_box), sublist_box);
           break;
@@ -600,7 +601,7 @@ parse_markdown(md_t *ctx, const char *markdown)
   for (int i = 0; extensions[i] != NULL; i++) {
     syntax_extension = cmark_find_syntax_extension(extensions[i]);
     if (!syntax_extension) {
-      g_warning("Unknown extension %s\n", extensions[i]);
+      g_warning("Unknown extension %s", extensions[i]);
       continue;
     }
     cmark_parser_attach_syntax_extension(parser, syntax_extension);
@@ -610,7 +611,10 @@ parse_markdown(md_t *ctx, const char *markdown)
 
   cmark_node *doc = cmark_parser_finish(parser);
 
-  print_node(doc, 0);
+  if (PRINT_DEBUG) {
+    g_debug("Parsed markdown AST:");
+    print_node(doc, 0);
+  }
   display_markdown(ctx, doc, ctx->box);
   cmark_node_free(doc);
 }
@@ -649,7 +653,7 @@ handle_markdown(listener_t *listener, const gchar *markdown, gpointer user_data)
 {
   md_t *ctx = user_data;
 
-  g_print("Parsing markdown file: %s\n", listener_get_file_path(listener));
+  g_debug("Parsing markdown file: %s", listener_get_file_path(listener));
 
   clear_md(ctx);
 
@@ -695,7 +699,6 @@ handle_markdown(listener_t *listener, const gchar *markdown, gpointer user_data)
 
   ctx->toc = toc_new(ctx->toc_box);
   ctx->html = html_new();
-  g_print("Initiating parsing: %s\n", listener_get_file_path(listener));
 
   set_sidebar_title(ctx, listener);
   parse_markdown(ctx, markdown);

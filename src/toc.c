@@ -88,7 +88,7 @@ sidebar_item_clicked(GtkWidget *button, G_GNUC_UNUSED gpointer user_data)
   gtk_widget_set_focus_on_click(heading, FALSE);
   gtk_label_set_selectable(GTK_LABEL(heading), FALSE);
 
-  g_message("Sidebar item clicked: %s", gtk_label_get_text(GTK_LABEL(heading)));
+  g_debug("Sidebar item clicked: %s", gtk_label_get_text(GTK_LABEL(heading)));
 }
 
 GtkWidget *
@@ -104,7 +104,7 @@ toc_add_heading(toc_t *toc, const gchar *heading_text, int level)
   g_return_val_if_fail(toc != NULL, NULL);
   g_return_val_if_fail(heading_text != NULL, NULL);
 
-  g_message("Adding heading: %s (level %d)", heading_text, level);
+  g_debug("Adding heading: %s (level %d)", heading_text, level);
 
   add_count(toc, level);
   prefix = get_prefix(toc, level);
@@ -131,7 +131,7 @@ toc_add_heading(toc_t *toc, const gchar *heading_text, int level)
                    G_CALLBACK(sidebar_item_clicked),
                    NULL);
   gtk_box_append(GTK_BOX(toc->sidebar), sidebar_item);
-  g_message("Added sidebar item: %s", heading_text_prefixed);
+  g_debug("Added sidebar item: %s", heading_text_prefixed);
 
   return heading;
 }
@@ -139,7 +139,6 @@ toc_add_heading(toc_t *toc, const gchar *heading_text, int level)
 GtkWidget *
 toc_get(toc_t *toc)
 {
-  g_message("Getting TOC widget");
   return g_object_ref(toc->table);
 }
 
