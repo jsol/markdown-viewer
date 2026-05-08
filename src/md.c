@@ -9,13 +9,15 @@
 #include <cmark-gfm-core-extensions.h>
 
 #define OBJ_DATA_IMG "image"
-#define PRINT_DEBUG  FALSE
+#define PRINT_DEBUG  TRUE
 
 struct md {
   GtkWidget *content_parent;
   GtkWidget *toc_parent;
   GtkWidget *box;
   GtkWidget *toc_box;
+  GtkWidget *footnotes_grid;
+  gint footnote_num;
   gchar *root_path;
   listener_t *listener;
   GPtrArray *image_monitors;
@@ -280,6 +282,14 @@ display_paragraph(md_t *ctx, cmark_node *node, GtkWidget *box)
       if (allowed_html(cmark_node_get_literal(child))) {
         g_string_append(paragraph_text, cmark_node_get_literal(child));
       }
+      break;
+    }
+
+    case CMARK_NODE_FOOTNOTE_REFERENCE: {
+      g_string_append(paragraph_text, "<sup>");
+      g_string_append(paragraph_text, cmark_node_get_literal(child));
+      g_string_append(paragraph_text, "</sup>");
+
       break;
     }
 
@@ -573,6 +583,48 @@ display_markdown(md_t *ctx, cmark_node *node, GtkWidget *box)
     break;
   }
 
+  case CMARK_NODE_FOOTNOTE_DEFINITION: {
+    cmark_node *footnote_child = cmark_node_first_child(node);
+    if (ctx->footnotes_grid == NULL) {
+      GtkWidget *separator = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+      ctx->footnotes_grid = gtk_grid_new();
+      gtk_grid_set_row_spacing(GTK_GRID(ctx->footnotes_grid), 5);
+      gtk_grid_set_column_spacing(GTK_GRID(ctx->footnotes_grid), 5);
+      gtk_grid_set_column_homogeneous(GTK_GRID(ctx->footnotes_grid), FALSE);
+
+      gtk_box_append(GTK_BOX(box), separator);
+      gtk_box_append(GTK_BOX(box), GTK_WIDGET(ctx->footnotes_grid));
+    }
+
+    gchar *footnote_label_text = g_strdup_printf("%d.", ctx->footnote_num + 1);
+
+    GtkWidget *footnote_label = gtk_label_new(footnote_label_text);
+    gtk_widget_set_halign(footnote_label, GTK_ALIGN_START);
+
+    GtkWidget *footnote_content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    while (footnote_child) {
+      display_paragraph(ctx, footnote_child, footnote_content);
+
+      footnote_child = cmark_node_next(footnote_child);
+    }
+
+    gtk_grid_attach(GTK_GRID(ctx->footnotes_grid),
+                    footnote_label,
+                    0,
+                    ctx->footnote_num,
+                    1,
+                    1);
+    gtk_grid_attach(GTK_GRID(ctx->footnotes_grid),
+                    footnote_content,
+                    1,
+                    ctx->footnote_num,
+                    1,
+                    1);
+    ctx->footnote_num++;
+
+    break;
+  }
+
   case CMARK_NODE_DOCUMENT:
     while (child) {
       display_markdown(ctx, child, box);
@@ -594,7 +646,7 @@ static void
 parse_markdown(md_t *ctx, const char *markdown)
 {
   const gchar *extensions[] = { "table", "strikethrough", "tasklist", NULL };
-  cmark_parser *parser = cmark_parser_new(CMARK_OPT_DEFAULT);
+  cmark_parser *parser = cmark_parser_new(CMARK_OPT_FOOTNOTES);
   cmark_gfm_core_extensions_ensure_registered();
   cmark_syntax_extension *syntax_extension;
 
