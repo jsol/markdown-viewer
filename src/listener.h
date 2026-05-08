@@ -2,6 +2,7 @@
 
 #include <gio/gio.h>
 #include <glib.h>
+#include <gdk/gdk.h>
 
 typedef struct listener listener_t;
 
@@ -12,9 +13,9 @@ typedef struct listener listener_t;
  * @param run_cmd The run command
  * @param user_data The user data
  */
-typedef void (*listener_approved_cb)(listener_t *listener,
-                                     const gchar *run_cmd,
-                                     gpointer user_data);
+typedef void (*listener_cmd_cb)(listener_t *listener,
+                                const gchar *run_cmd,
+                                gpointer user_data);
 /**
  * Callback for when the listener has read the markdown.
  *
@@ -27,6 +28,17 @@ typedef void (*listener_md_cb)(listener_t *listener,
                                gpointer user_data);
 
 /**
+ * Callback for when the listener has read the image.
+ *
+ * @param listener The listener
+ * @param img The image
+ * @param user_data The user data
+ */
+typedef void (*listener_img_cb)(listener_t *listener,
+                                GdkTexture *img,
+                                gpointer user_data);
+
+/**
  * Create a new listener.
  *
  * @param file The file to listen to
@@ -37,9 +49,19 @@ typedef void (*listener_md_cb)(listener_t *listener,
  * @return The new listener
  */
 listener_t *
-listener_new(GFile *file, listener_approved_cb cb, gpointer user_data);
+listener_new(GFile *file);
 
-void listener_set_md_cb(listener_t *listener, listener_md_cb md_cb, gpointer user_data);
+void listener_set_cmd_cb(listener_t *listener,
+                         listener_cmd_cb cmd_cb,
+                         gpointer user_data);
+
+void listener_set_md_cb(listener_t *listener,
+                        listener_md_cb md_cb,
+                        gpointer user_data);
+
+void listener_set_img_cb(listener_t *listener,
+                         listener_img_cb img_cb,
+                         gpointer user_data);
 
 /**
  * Approve the run command.

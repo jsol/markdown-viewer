@@ -260,7 +260,9 @@ static void
 process_file(GFile *file, struct app_ctx *ctx)
 {
   md_t *md;
-  listener_t *listener = listener_new(file, handle_run_comment, ctx);
+  listener_t *listener = listener_new(file);
+
+  listener_set_cmd_cb(listener, handle_run_comment, ctx);
   g_ptr_array_add(ctx->file_listeners, listener);
   if (listener_is_md(listener)) {
     md = md_new(listener, GTK_BOX(ctx->content), GTK_BOX(ctx->toc));

@@ -5,11 +5,14 @@ struct listener {
   GFile *file;
   gchar *checksum;
 
-  listener_approved_cb cb;
-  gpointer user_data;
+  listener_cmd_cb cmd_cb;
+  gpointer cmd_user_data;
 
   listener_md_cb md_cb;
   gpointer md_user_data;
+
+  listener_img_cb img_cb;
+  gpointer img_user_data;
 
   gchar *original_run_cmd;
   GStrv run_cmd;
@@ -224,37 +227,25 @@ setup_run_cmd(listener_t *ctx, const gchar *prefix)
   g_clear_object(&data_stream);
 
   if (!line) {
-    ctx->cb(ctx, NULL, ctx->user_data);
+    ctx->cmd_cb(ctx, NULL, ctx->cmd_user_data);
     return;
   }
 
   ctx->original_run_cmd = g_strdup(line + strlen(prefix));
 
   g_strstrip(ctx->original_run_cmd);
-  ctx->cb(ctx, ctx->original_run_cmd, ctx->user_data);
+  ctx->cmd_cb(ctx, ctx->original_run_cmd, ctx->cmd_user_data);
   g_free(line);
 }
 
 listener_t *
-listener_new(GFile *file, listener_approved_cb cb, gpointer user_data)
+listener_new(GFile *file)
 {
   listener_t *listener = g_new0(listener_t, 1);
 
   listener->file = g_object_ref(file);
-  listener->user_data = user_data;
   listener->monitor =
           g_file_monitor_file(file, G_FILE_MONITOR_NONE, NULL, NULL);
-
-  if (!listener_is_md(listener)) {
-    listener->cb = cb;
-  }
-
-  for (int i = 0; run_exts[i] != NULL; i++) {
-    if (g_str_has_suffix(g_file_peek_path(file), run_exts[i])) {
-      setup_run_cmd(listener, run_prefix[i]);
-      break;
-    }
-  }
 
   g_signal_connect(listener->monitor,
                    "changed",
@@ -262,6 +253,22 @@ listener_new(GFile *file, listener_approved_cb cb, gpointer user_data)
                    listener);
 
   return listener;
+}
+
+void
+listener_set_cmd_cb(listener_t *ctx, listener_cmd_cb cmd_cb, gpointer user_data)
+{
+  g_return_if_fail(ctx != NULL);
+
+  ctx->cmd_cb = cmd_cb;
+  ctx->cmd_user_data = user_data;
+
+  for (int i = 0; run_exts[i] != NULL; i++) {
+    if (g_str_has_suffix(g_file_peek_path(ctx->file), run_exts[i])) {
+      setup_run_cmd(ctx, run_prefix[i]);
+      break;
+    }
+  }
 }
 
 void
