@@ -3,6 +3,7 @@
 struct listener {
   GFileMonitor *monitor;
   GFile *file;
+  gchar *checksum;
 
   listener_approved_cb cb;
   gpointer user_data;
@@ -115,6 +116,59 @@ read_md(gpointer data)
   g_free(markdown);
 }
 
+static gboolean
+checksum(listener_t *ctx, GFile *file)
+{
+  GChecksum *checksum = NULL;
+  const gchar *digest = NULL;
+  GFileInputStream *stream = NULL;
+  gboolean ret = FALSE;
+
+  stream = g_file_read(file, NULL, NULL);
+  if (!stream) {
+    g_warning("Failed to read file: %s", g_file_peek_path(file));
+    return FALSE;
+  }
+
+  checksum = g_checksum_new(G_CHECKSUM_MD5);
+  while (TRUE) {
+    guchar buffer[4096];
+    GError *error = NULL;
+    gssize bytes_read;
+
+    bytes_read = g_input_stream_read(G_INPUT_STREAM(stream),
+                                     buffer,
+                                     sizeof(buffer),
+                                     NULL,
+                                     &error);
+    if (bytes_read < 0) {
+      g_warning("Failed to read file %s: %s",
+                g_file_peek_path(file),
+                error->message);
+      g_clear_error(&error);
+      goto out;
+    } else if (bytes_read == 0) {
+      break;
+    }
+
+    g_checksum_update(checksum, buffer, bytes_read);
+  }
+
+  digest = g_checksum_get_string(checksum);
+
+  if (g_strcmp0(ctx->checksum, digest) != 0) {
+    g_free(ctx->checksum);
+    ctx->checksum = g_strdup(digest);
+    ret = TRUE;
+  }
+
+out:
+  g_clear_object(&stream);
+  g_clear_object(&checksum);
+
+  return ret;
+}
+
 static void
 monitor_changes(G_GNUC_UNUSED GFileMonitor *monitor,
                 GFile *file,
@@ -126,6 +180,11 @@ monitor_changes(G_GNUC_UNUSED GFileMonitor *monitor,
   if (event_type == G_FILE_MONITOR_EVENT_CHANGED ||
       event_type == G_FILE_MONITOR_EVENT_CREATED) {
     g_message("File changed: %s", g_file_peek_path(file));
+
+    if (!checksum(ctx, file)) {
+      g_message("File content did not change: %s", g_file_peek_path(file));
+      return;
+    }
 
     if (ctx->md_cb) {
       read_md(ctx);
