@@ -192,7 +192,7 @@ checksum(listener_t *ctx, GFile *file)
 
 out:
   g_clear_object(&stream);
-  g_clear_object(&checksum);
+  g_clear_pointer(&checksum, g_checksum_free);
 
   return ret;
 }

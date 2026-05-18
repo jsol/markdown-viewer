@@ -3,12 +3,16 @@
 
 #include "toc.h"
 
-#define OBJ_DATA_HEADING "heading"
+#define OBJ_DATA_CTX "ctx"
 
 struct _toc {
   GtkWidget *table;
   GtkWidget *sidebar;
+  GtkTextView *view;
   gint heading_counts[7];
+
+  toc_clicked_cb cb;
+  gpointer user_data;
 };
 
 static void
@@ -50,7 +54,10 @@ get_prefix(toc_t *toc, int level)
 }
 
 toc_t *
-toc_new(GtkWidget *box)
+toc_new(GtkWidget *box,
+        GtkTextView *view,
+        toc_clicked_cb cb,
+        gpointer user_data)
 {
   toc_t *toc = g_new0(toc_t, 1);
 
@@ -59,8 +66,11 @@ toc_new(GtkWidget *box)
   }
 
   toc->sidebar = box;
+  toc->view = view;
   toc->table = g_object_ref_sink(gtk_box_new(GTK_ORIENTATION_VERTICAL, 5));
 
+  toc->cb = cb;
+  toc->user_data = user_data;
   return toc;
 }
 
@@ -76,34 +86,48 @@ toc_is_empty(toc_t *toc)
 }
 
 static void
-sidebar_item_clicked(GtkWidget *button, G_GNUC_UNUSED gpointer user_data)
+sidebar_item_clicked(GtkWidget *button, gpointer user_data)
 {
-  GtkWidget *heading = g_object_get_data(G_OBJECT(button), OBJ_DATA_HEADING);
-  gboolean selectable = gtk_label_get_selectable(GTK_LABEL(heading));
+  toc_t *toc = g_object_get_data(G_OBJECT(button), OBJ_DATA_CTX);
+  GtkTextMark *mark = user_data;
 
-  gtk_widget_set_focus_on_click(heading, TRUE);
-  gtk_label_set_selectable(GTK_LABEL(heading), TRUE);
-  if (!gtk_widget_grab_focus(heading)) {
-    g_message("Could not focus heading");
+  g_assert(toc);
+  g_assert(mark);
+  g_message("Scrolling to mark: %p", mark);
+
+  if (toc->cb) {
+    toc->cb(toc->user_data);
   }
-  gtk_widget_set_focus_on_click(heading, FALSE);
-  gtk_label_set_selectable(GTK_LABEL(heading), selectable);
 
-  g_debug("Sidebar item clicked: %s", gtk_label_get_text(GTK_LABEL(heading)));
+  gtk_text_view_scroll_to_mark(toc->view, mark, 0.0, TRUE, 0.0, 0.0);
 }
 
-GtkWidget *
+static GtkTextMark *
+add_mark(GtkTextView *view)
+{
+  GtkTextMark *mark;
+  GtkTextIter iter;
+  GtkTextBuffer *buffer;
+
+  buffer = gtk_text_view_get_buffer(view);
+  gtk_text_buffer_get_end_iter(buffer, &iter);
+
+  mark = gtk_text_buffer_create_mark(buffer, NULL, &iter, TRUE);
+
+  return mark;
+}
+
+void
 toc_add_heading(toc_t *toc, const gchar *heading_text, int level)
 {
-  gchar class_name[12] = { 0 };
   gchar *heading_text_prefixed;
   gchar *prefix;
-  GtkWidget *heading;
   GtkWidget *toc_item;
   GtkWidget *sidebar_item;
+  GtkTextMark *mark;
 
-  g_return_val_if_fail(toc != NULL, NULL);
-  g_return_val_if_fail(heading_text != NULL, NULL);
+  g_return_if_fail(toc != NULL);
+  g_return_if_fail(heading_text != NULL);
 
   g_debug("Adding heading: %s (level %d)", heading_text, level);
 
@@ -112,11 +136,7 @@ toc_add_heading(toc_t *toc, const gchar *heading_text, int level)
   heading_text_prefixed = g_strdup_printf("%s %s", prefix, heading_text);
   g_free(prefix);
 
-  snprintf(class_name, sizeof(class_name), "heading-%d", level);
-
-  heading = gtk_label_new(heading_text_prefixed);
   toc_item = gtk_label_new(heading_text_prefixed);
-  gtk_widget_add_css_class(heading, class_name);
 
   g_assert(toc->table);
   gtk_box_append(GTK_BOX(toc->table), toc_item);
@@ -126,15 +146,16 @@ toc_add_heading(toc_t *toc, const gchar *heading_text, int level)
   gtk_widget_set_margin_start(sidebar_item, 20);
   gtk_widget_set_margin_end(sidebar_item, 20);
   gtk_widget_add_css_class(sidebar_item, "sidebar-item");
-  g_object_set_data(G_OBJECT(sidebar_item), OBJ_DATA_HEADING, heading);
+
+  mark = add_mark(toc->view);
+  g_object_set_data(G_OBJECT(sidebar_item), OBJ_DATA_CTX, toc);
+
   g_signal_connect(sidebar_item,
                    "clicked",
                    G_CALLBACK(sidebar_item_clicked),
-                   NULL);
+                   mark);
   gtk_box_append(GTK_BOX(toc->sidebar), sidebar_item);
   g_debug("Added sidebar item: %s", heading_text_prefixed);
-
-  return heading;
 }
 
 GtkWidget *

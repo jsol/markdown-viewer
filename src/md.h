@@ -8,10 +8,12 @@
 #include "listener.h"
 
 typedef struct md md_t;
-extern cmark_node_type CMARK_NODE_TABLE, CMARK_NODE_TABLE_ROW,
-        CMARK_NODE_TABLE_CELL;
 
-md_t *
-md_new(listener_t *listener, GtkBox *scroll, GtkBox *toc);
+typedef void (*display_md)(const gchar *path,  gpointer user_data);
+
+md_t *md_new(listener_t *listener, GtkBox *toc, display_md display, gpointer user_data);
+
+
+GtkWidget *md_get_view(md_t *md);
 
 void md_free(md_t *md);

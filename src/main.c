@@ -21,10 +21,12 @@ struct app_ctx {
   GtkWidget *toc;
   GtkWidget *view;
   GPtrArray *file_listeners;
-  GPtrArray *md;
+  GHashTable *md;
 
   GPtrArray *approved_run_cmds;
 };
+
+static void process_file(GFile *file, struct app_ctx *ctx);
 
 static GFile *
 get_approved_run_cmds_file(void)
@@ -250,7 +252,9 @@ setup_styles(void)
           ".heading-5{font-size: medium; font-weight: bold;} "
           ".heading-6{font-size: medium; font-weight: bold;} "
           ".monospace{font-family: monospace;} "
-          ".table-header{background-color: #AAAAAA; font-weight: bold;}";
+          ".table-header{background-color: #AAAAAA; font-weight: bold;} "
+          ".in-text-button {padding: 0px; margin: 0px; "
+          "margin-bottom: -7px;}";
 
   provider = gtk_css_provider_new();
   display = gdk_display_get_default();
@@ -261,17 +265,42 @@ setup_styles(void)
 }
 
 static void
+show_content(const gchar *path, gpointer user_data)
+{
+  struct app_ctx *app = user_data;
+  md_t *md;
+
+  md = g_hash_table_lookup(app->md, path);
+
+  if (!md) {
+    GFile *file = g_file_new_for_path(path);
+    process_file(file, app);
+    g_object_unref(file);
+  }
+  GtkWidget *content = md_get_view(md);
+  adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(app->content), content);
+}
+
+static void
 process_file(GFile *file, struct app_ctx *ctx)
 {
   md_t *md;
+
+  if (g_hash_table_contains(ctx->md, g_file_peek_path(file))) {
+    return;
+  }
+
   listener_t *listener = listener_new(file);
 
   listener_set_cmd_cb(listener, handle_run_comment, ctx);
   g_ptr_array_add(ctx->file_listeners, listener);
   if (listener_is_md(listener)) {
-    md = md_new(listener, GTK_BOX(ctx->content), GTK_BOX(ctx->toc));
+    md = md_new(listener, GTK_BOX(ctx->toc), show_content, ctx);
 
-    g_ptr_array_add(ctx->md, md);
+    g_hash_table_insert(ctx->md,
+                        g_strdup(listener_get_file_path(listener)),
+                        md);
+    show_content(listener_get_file_path(listener), ctx);
   }
 }
 
@@ -366,9 +395,7 @@ setup_content(struct app_ctx *ctx, GtkApplication *app)
 {
   GtkWidget *content;
   GtkWidget *header;
-  GtkWidget *scroll;
   GtkWidget *collapse_button;
-  GtkWidget *pages;
   GtkWidget *menu_button;
 
   content = adw_toolbar_view_new();
@@ -386,18 +413,6 @@ setup_content(struct app_ctx *ctx, GtkApplication *app)
 
   adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(content), header);
 
-  scroll = gtk_scrolled_window_new();
-  gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(scroll), 300);
-  gtk_scrolled_window_set_max_content_height(GTK_SCROLLED_WINDOW(scroll), -1);
-  gtk_widget_set_vexpand(scroll, TRUE);
-  adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(content), scroll);
-
-  pages = gtk_box_new(GTK_ORIENTATION_VERTICAL, 40);
-
-  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroll), pages);
-
-  ctx->content = g_object_ref_sink(pages);
-
   return content;
 }
 
@@ -414,11 +429,12 @@ setup_split_view(struct app_ctx *ctx, GtkApplication *app)
   content = setup_content(ctx, app);
 
   adw_overlay_split_view_set_sidebar(ADW_OVERLAY_SPLIT_VIEW(view), sidebar);
-  adw_overlay_split_view_set_content(ADW_OVERLAY_SPLIT_VIEW(view), content);
 
+  adw_overlay_split_view_set_content(ADW_OVERLAY_SPLIT_VIEW(view), content);
   adw_overlay_split_view_set_collapsed(ADW_OVERLAY_SPLIT_VIEW(view), TRUE);
 
   ctx->view = g_object_ref_sink(view);
+  ctx->content = g_object_ref_sink(content);
 
   return view;
 }
@@ -486,7 +502,7 @@ open_cb(GApplication *self,
     process_file(files[i], ctx);
   }
 
-  if (ctx->md->len == 0) {
+  if (g_hash_table_size(ctx->md) == 0) {
     GFile *markdown_file;
 
     markdown_file = listener_get_output_file(ctx->file_listeners->pdata[0]);
@@ -509,7 +525,10 @@ main(int argc, char **argv)
 
   load_approved_run_cmds(&ctx);
 
-  ctx.md = g_ptr_array_new_with_free_func((GDestroyNotify) md_free);
+  ctx.md = g_hash_table_new_full(g_str_hash,
+                                 g_str_equal,
+                                 g_free,
+                                 (GDestroyNotify) md_free);
   ctx.file_listeners =
           g_ptr_array_new_with_free_func((GDestroyNotify) listener_free);
   app = adw_application_new(APP_ID, G_APPLICATION_HANDLES_OPEN);
