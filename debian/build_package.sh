@@ -5,6 +5,7 @@ FULLNAME="com.github.jsol.markdownviewer"
 VERSION=$(head -n 1 changelog | grep -Po '\d\.\d\.\d')
 BINARY="$1"
 TARGET="$2"
+DEB_FILE="$3"
 if [ -z "$BINARY" ]; then
   BINARY="../build/src/$NAME"
 fi
@@ -13,8 +14,9 @@ if [ -z "$TARGET" ]; then
   TARGET="dist"
 fi
 
-
-
+if [ -z "$DEB_FILE" ]; then
+  $DEB_FILE="${NAME}_${VERSION}_amd64.deb"
+fi
 
 echo "Building package for version $VERSION (fetched from changelog)..."
 
@@ -31,16 +33,14 @@ objcopy --strip-debug --strip-unneeded "$BINARY" "$TARGET/$NAME/usr/bin/$NAME"
 
 # Add the changelog
 mkdir -p "$TARGET/$NAME/usr/share/doc/$NAME"
-gzip -9 -n -c  < changelog  > changelog.gz
-mv changelog.gz "$TARGET/$NAME/usr/share/doc/$NAME"
+gzip -9 -n -c  < changelog  > "$TARGET/$NAME/usr/share/doc/$NAME/changelog.gz"
 
 # Add copyright
 cp copyright "$TARGET/$NAME/usr/share/doc/$NAME/copyright"
 
 # Add man page
 mkdir -p "$TARGET/$NAME/usr/share/man/man1"
-gzip -9 -n -c  < ../man/manpage.1  > $NAME.1.gz
-mv $NAME.1.gz "$TARGET/$NAME/usr/share/man/man1"
+gzip -9 -n -c  < ../man/manpage.1  > "$TARGET/$NAME/usr/share/man/man1/$NAME.1.gz"
 
 # Add desktop entry
 mkdir -p "$TARGET/$NAME/usr/share/applications"
@@ -62,5 +62,5 @@ dpkg-deb --build --root-owner-group $NAME
 lintian $NAME.deb
 
 cd -
-mv "$TARGET/$NAME.deb" "${NAME}_${VERSION}_amd64.deb"
+mv "$TARGET/$NAME.deb" "${DEB_FILE}"
 rm -rf "$TARGET"

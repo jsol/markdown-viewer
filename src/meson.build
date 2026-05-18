@@ -4,6 +4,7 @@ deps += dependency('gio-2.0', version: '>=2.72.4')
 deps += dependency('glib-2.0', version: '>=2.72.4')
 deps += dependency('libadwaita-1', version: '>=1.1.7')
 deps += dependency('gtk4', version: '>=4.6.9')
+deps += dependency('libcmark-gfm', static: true)
 
 
 # Compiler flags
@@ -21,13 +22,6 @@ extra_cflags = [
   '-Dstrip=true',
 ]
 
-cmark = dependency('libcmark', required: false)
-if cmark.found()
-  deps += cmark
-else
-  deps += dependency('libcmark-gfm', required: true)
-  extra_cflags += '-DUSE_GFM'
-endif
 
 sources = (
   [
