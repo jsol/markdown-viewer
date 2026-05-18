@@ -7,6 +7,10 @@
 #include "listener.h"
 #include "md.h"
 
+#ifndef APP_ID
+#define APP_ID "com.github.jsol.markdownviewer"
+#endif
+
 #define OBJ_DATA_CTX "app-ctx"
 
 struct app_ctx {
@@ -508,8 +512,7 @@ main(int argc, char **argv)
   ctx.md = g_ptr_array_new_with_free_func((GDestroyNotify) md_free);
   ctx.file_listeners =
           g_ptr_array_new_with_free_func((GDestroyNotify) listener_free);
-  app = adw_application_new("com.github.jsol.markdownviewer",
-                            G_APPLICATION_HANDLES_OPEN);
+  app = adw_application_new(APP_ID, G_APPLICATION_HANDLES_OPEN);
   g_signal_connect(app, "open", G_CALLBACK(open_cb), &ctx);
   g_signal_connect(app, "activate", G_CALLBACK(activate_cb), &ctx);
 

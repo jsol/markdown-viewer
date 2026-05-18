@@ -79,6 +79,7 @@ static void
 sidebar_item_clicked(GtkWidget *button, G_GNUC_UNUSED gpointer user_data)
 {
   GtkWidget *heading = g_object_get_data(G_OBJECT(button), OBJ_DATA_HEADING);
+  gboolean selectable = gtk_label_get_selectable(GTK_LABEL(heading));
 
   gtk_widget_set_focus_on_click(heading, TRUE);
   gtk_label_set_selectable(GTK_LABEL(heading), TRUE);
@@ -86,7 +87,7 @@ sidebar_item_clicked(GtkWidget *button, G_GNUC_UNUSED gpointer user_data)
     g_message("Could not focus heading");
   }
   gtk_widget_set_focus_on_click(heading, FALSE);
-  gtk_label_set_selectable(GTK_LABEL(heading), FALSE);
+  gtk_label_set_selectable(GTK_LABEL(heading), selectable);
 
   g_debug("Sidebar item clicked: %s", gtk_label_get_text(GTK_LABEL(heading)));
 }
