@@ -3,3 +3,8 @@ option('version',
   value : 'N/A',
   description : 'Version of the application built'
 )
+option('appid',
+  type : 'string',
+  value : 'com.github.jsol.markdownviewer',
+  description : 'Application ID (e.g., com.example.app)'
+)

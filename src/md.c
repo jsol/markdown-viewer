@@ -52,6 +52,23 @@ print_node(cmark_node *node, int indent)
   }
 }
 
+static GtkWidget *
+label_new(const gchar *text)
+{
+  GtkWidget *label;
+
+  g_assert(text);
+
+  label = gtk_label_new(text);
+
+  gtk_label_set_wrap(GTK_LABEL(label), TRUE);
+  gtk_label_set_use_markup(GTK_LABEL(label), TRUE);
+  gtk_label_set_selectable(GTK_LABEL(label), TRUE);
+  gtk_widget_set_halign(label, GTK_ALIGN_START);
+
+  return label;
+}
+
 /*
  * Returns true if the given HTML tag is allowed (as in it has a corresponding
  * overlap in the Pango styles).
@@ -294,10 +311,7 @@ display_paragraph(md_t *ctx, cmark_node *node, GtkWidget *box)
 
     case CMARK_NODE_LINK: {
       if (paragraph_text->len > 0) {
-        GtkWidget *label = gtk_label_new(paragraph_text->str);
-        gtk_label_set_wrap(GTK_LABEL(label), TRUE);
-        gtk_label_set_use_markup(GTK_LABEL(label), TRUE);
-        gtk_widget_set_halign(label, GTK_ALIGN_START);
+        GtkWidget *label = label_new(paragraph_text->str);
         gtk_box_append(GTK_BOX(box), label);
 
         g_string_set_size(paragraph_text, 0);
@@ -318,10 +332,7 @@ display_paragraph(md_t *ctx, cmark_node *node, GtkWidget *box)
 
       g_debug("Encountered list in paragraph, creating new box for it");
       if (paragraph_text->len > 0) {
-        GtkWidget *label = gtk_label_new(paragraph_text->str);
-        gtk_label_set_wrap(GTK_LABEL(label), TRUE);
-        gtk_label_set_use_markup(GTK_LABEL(label), TRUE);
-        gtk_widget_set_halign(label, GTK_ALIGN_START);
+        GtkWidget *label = label_new(paragraph_text->str);
         gtk_box_append(GTK_BOX(box), label);
 
         g_string_set_size(paragraph_text, 0);
@@ -350,10 +361,7 @@ display_paragraph(md_t *ctx, cmark_node *node, GtkWidget *box)
   }
 
   if (paragraph_text->len > 0) {
-    GtkWidget *label = gtk_label_new(paragraph_text->str);
-    gtk_label_set_wrap(GTK_LABEL(label), TRUE);
-    gtk_label_set_use_markup(GTK_LABEL(label), TRUE);
-    gtk_widget_set_halign(label, GTK_ALIGN_START);
+    GtkWidget *label = label_new(paragraph_text->str);
     gtk_box_append(GTK_BOX(box), label);
   }
 
@@ -373,7 +381,7 @@ display_table_row(cmark_node *node,
 
   while (child) {
     cmark_node *header_cell_child = cmark_node_first_child(child);
-    GtkWidget *label = gtk_label_new(cmark_node_get_literal(header_cell_child));
+    GtkWidget *label = label_new(cmark_node_get_literal(header_cell_child));
     GtkWidget *frame = gtk_frame_new(NULL);
 
     gtk_frame_set_child(GTK_FRAME(frame), label);
@@ -471,7 +479,7 @@ display_list(md_t *ctx, cmark_node *list_node, GtkWidget *box)
         }
       }
 
-      item_prefix_label = gtk_label_new(item_prefix);
+      item_prefix_label = label_new(item_prefix);
       gtk_widget_set_halign(item_prefix_label, GTK_ALIGN_START);
       gtk_widget_set_valign(item_prefix_label, GTK_ALIGN_START);
       gtk_grid_attach(grid, item_prefix_label, 0, num, 1, 1);
@@ -521,8 +529,7 @@ display_markdown(md_t *ctx, cmark_node *node, GtkWidget *box)
       //      gtk_box_append(GTK_BOX(box), toc_get(ctx->toc));
       break;
     }
-    GtkWidget *label = gtk_label_new(cmark_node_get_literal(node));
-    gtk_widget_set_halign(label, GTK_ALIGN_START);
+    GtkWidget *label = label_new(cmark_node_get_literal(node));
     gtk_box_append(GTK_BOX(box), label);
     break;
   }
@@ -535,9 +542,7 @@ display_markdown(md_t *ctx, cmark_node *node, GtkWidget *box)
   }
 
   case CMARK_NODE_CODE_BLOCK: {
-    GtkWidget *label = gtk_label_new(cmark_node_get_literal(node));
-    gtk_widget_set_halign(label, GTK_ALIGN_START);
-    gtk_label_set_wrap(GTK_LABEL(label), TRUE);
+    GtkWidget *label = label_new(cmark_node_get_literal(node));
     gtk_widget_add_css_class(label, "monospace");
     gtk_box_append(GTK_BOX(box), label);
     break;
@@ -597,8 +602,7 @@ display_markdown(md_t *ctx, cmark_node *node, GtkWidget *box)
 
     gchar *footnote_label_text = g_strdup_printf("%d.", ctx->footnote_num + 1);
 
-    GtkWidget *footnote_label = gtk_label_new(footnote_label_text);
-    gtk_widget_set_halign(footnote_label, GTK_ALIGN_START);
+    GtkWidget *footnote_label = label_new(footnote_label_text);
 
     GtkWidget *footnote_content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     while (footnote_child) {
@@ -690,10 +694,8 @@ set_sidebar_title(md_t *ctx, listener_t *listener)
 
   title = g_strdup_printf("<b>%s:</b>", basename);
 
-  title_label = gtk_label_new(title);
+  title_label = label_new(title);
 
-  gtk_label_set_use_markup(GTK_LABEL(title_label), TRUE);
-  gtk_widget_set_halign(title_label, GTK_ALIGN_START);
   gtk_widget_set_margin_start(title_label, 20);
 
   gtk_box_insert_child_after(GTK_BOX(ctx->toc_box), title_label, NULL);
