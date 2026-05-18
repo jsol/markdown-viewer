@@ -250,7 +250,9 @@ setup_styles(void)
           ".heading-5{font-size: medium; font-weight: bold;} "
           ".heading-6{font-size: medium; font-weight: bold;} "
           ".monospace{font-family: monospace;} "
-          ".table-header{background-color: #AAAAAA; font-weight: bold;}";
+          ".table-header{background-color: #AAAAAA; font-weight: bold;} "
+          ".in-text-button {padding: 0px; margin: 0px; "
+          "margin-bottom: -7px;}";
 
   provider = gtk_css_provider_new();
   display = gdk_display_get_default();
@@ -390,9 +392,11 @@ setup_content(struct app_ctx *ctx, GtkApplication *app)
   gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(scroll), 300);
   gtk_scrolled_window_set_max_content_height(GTK_SCROLLED_WINDOW(scroll), -1);
   gtk_widget_set_vexpand(scroll, TRUE);
+  gtk_widget_set_hexpand(scroll, TRUE);
   adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(content), scroll);
 
   pages = gtk_box_new(GTK_ORIENTATION_VERTICAL, 40);
+  gtk_widget_set_hexpand(pages, TRUE);
 
   gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroll), pages);
 
