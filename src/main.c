@@ -6,6 +6,7 @@
 
 #include "listener.h"
 #include "md.h"
+#include "color.h"
 
 #ifndef APP_ID
 #define APP_ID "com.github.jsol.markdownviewer"
@@ -16,6 +17,7 @@
 struct app_ctx {
   gchar id[4];
 
+  color_t *color;
   GtkWidget *window;
   GtkWidget *content;
   GtkWidget *toc;
@@ -256,26 +258,6 @@ handle_run_comment(listener_t *listener,
 }
 
 static void
-setup_styles(void)
-{
-  GtkCssProvider *provider;
-  GdkDisplay *display;
-  const gchar *style_light =
-          ".monospace{font-family: monospace;} "
-          ".table-header{background-color: #AAAAAA; font-weight: bold;} "
-          ".in-text-button {padding: 0px; margin: 0px; "
-          "margin-bottom: -7px;}"
-          "frame {border-radius: 0px;}";
-
-  provider = gtk_css_provider_new();
-  display = gdk_display_get_default();
-  gtk_css_provider_load_from_string(provider, style_light);
-  gtk_style_context_add_provider_for_display(display,
-                                             GTK_STYLE_PROVIDER(provider),
-                                             GTK_STYLE_PROVIDER_PRIORITY_USER);
-}
-
-static void
 show_content(const gchar *path, gpointer user_data)
 {
   struct app_ctx *app = user_data;
@@ -311,7 +293,7 @@ process_file(GFile *file, struct app_ctx *ctx)
   listener_set_cmd_cb(listener, handle_run_comment, ctx);
   g_ptr_array_add(ctx->file_listeners, listener);
   if (listener_is_md(listener)) {
-    md = md_new(listener, GTK_BOX(ctx->toc), show_content, ctx);
+    md = md_new(listener, GTK_BOX(ctx->toc),ctx->color, show_content, ctx);
 
     g_hash_table_insert(ctx->md,
                         g_strdup(listener_get_file_path(listener)),
@@ -462,8 +444,7 @@ activate_cb(GtkApplication *app, gpointer user_data)
   GtkWidget *window = adw_application_window_new(app);
   GtkWidget *view;
 
-  setup_styles();
-
+  ctx->color = color_new();
   ctx->window = g_object_ref_sink(window);
   view = setup_split_view(ctx, app);
 

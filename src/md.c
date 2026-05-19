@@ -5,6 +5,7 @@
 #include "listener.h"
 #include "toc.h"
 #include "table.h"
+#include "color.h"
 
 #include <cmark-gfm.h>
 #include <cmark-gfm-core-extensions.h>
@@ -28,6 +29,7 @@
 #define RULER "\n•                                                  •\n"
 
 struct md {
+  color_t *color;
   GtkWidget *toc_parent;
   GtkWidget *toc_box;
   GtkWidget *footnotes_grid;
@@ -840,7 +842,7 @@ set_sidebar_title(md_t *ctx, listener_t *listener)
 }
 
 static GtkTextTagTable *
-setup_tag_table(void)
+setup_tag_table(md_t *ctx)
 {
   GtkTextTagTable *tag_table;
 
@@ -855,14 +857,8 @@ setup_tag_table(void)
   g_object_set(italic_tag, "style", PANGO_STYLE_ITALIC, NULL);
 
   GtkTextTag *code_tag = gtk_text_tag_new(TAG_CODE);
-  g_object_set(code_tag,
-               "family",
-               "monospace",
-               "paragraph-background",
-               "lightgrey",
-               "indent",
-               20,
-               NULL);
+  g_object_set(code_tag, "family", "monospace", "indent", 20, NULL);
+  color_handle_tag(ctx->color, COLOR_TYPE_CODE, code_tag);
   gtk_text_tag_table_add(tag_table, code_tag);
 
   GtkTextTag *strikethrough_tag = gtk_text_tag_new(TAG_STRIKETHROUGH);
@@ -1001,7 +997,7 @@ handle_markdown(listener_t *listener, const gchar *markdown, gpointer user_data)
   ctx->current_tags =
           g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 
-  ctx->tag_table = setup_tag_table();
+  ctx->tag_table = setup_tag_table(ctx);
   ctx->buffer = gtk_text_buffer_new(ctx->tag_table);
 
   gtk_text_view_set_buffer(GTK_TEXT_VIEW(ctx->view), ctx->buffer);
@@ -1020,6 +1016,7 @@ handle_markdown(listener_t *listener, const gchar *markdown, gpointer user_data)
 md_t *
 md_new(listener_t *listener,
        GtkBox *toc,
+       color_t *color,
        display_md display,
        gpointer user_data)
 {
@@ -1029,6 +1026,7 @@ md_new(listener_t *listener,
   md->toc_parent = GTK_WIDGET(g_object_ref(toc));
 
   md->listener = listener;
+  md->color = color;
 
   md->image_listeners = g_hash_table_new_full(g_str_hash,
                                               g_str_equal,

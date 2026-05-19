@@ -25,6 +25,7 @@ extra_cflags = [
 
 sources = (
   [
+    'color.c',
     'html.c',
     'main.c',
     'toc.c',

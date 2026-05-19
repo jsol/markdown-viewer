@@ -2,7 +2,8 @@
 #include <adwaita.h>
 
 #include "table.h"
-#include "gtk/gtkexpression.h"
+
+#include "color.h"
 
 struct _table {
   guint num_align;
@@ -67,7 +68,13 @@ table_add_cell(table_t *ctx, const gchar *text)
   gtk_widget_set_hexpand(frame, TRUE);
 
   if (ctx->current_row_is_header) {
-    gtk_widget_add_css_class(frame, "table-header");
+    color_handle_widget(COLOR_TYPE_TABLE_BG_HEADER, frame);
+  } else {
+    if (ctx->current_row % 2 == 0) {
+      color_handle_widget(COLOR_TYPE_TABLE_BG_EVEN_ROW, frame);
+    } else {
+      color_handle_widget(COLOR_TYPE_TABLE_BG_ODD_ROW, frame);
+    }
   }
 
   if (ctx->current_col < (gint) ctx->num_align) {
