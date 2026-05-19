@@ -79,3 +79,9 @@ _________________
 ## Links
 
 This is a text with [a link](https://www.google.com) embedded in it.
+
+This is a relative link to [another page](./many_paragraphs.md).
+
+This is a link to a title [Heading level 2 alternative](#Heading%20level%202%20alternative).
+
+This is a relative link to [nonexistent page](./does_not_exist.md).

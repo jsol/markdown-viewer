@@ -11,6 +11,8 @@ struct _toc {
   GtkTextView *view;
   gint heading_counts[7];
 
+  GHashTable *mark_table;
+
   toc_clicked_cb cb;
   gpointer user_data;
 };
@@ -65,6 +67,8 @@ toc_new(GtkWidget *box,
     toc->heading_counts[i] = 0;
   }
 
+  toc->mark_table =
+          g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
   toc->sidebar = box;
   toc->view = view;
   toc->table = g_object_ref_sink(gtk_box_new(GTK_ORIENTATION_VERTICAL, 5));
@@ -154,6 +158,9 @@ toc_add_heading(toc_t *toc, const gchar *heading_text, int level)
                    "clicked",
                    G_CALLBACK(sidebar_item_clicked),
                    mark);
+
+  g_hash_table_insert(toc->mark_table, g_strdup(heading_text), mark);
+
   gtk_box_append(GTK_BOX(toc->sidebar), sidebar_item);
   g_debug("Added sidebar item: %s", heading_text_prefixed);
 }
@@ -165,12 +172,32 @@ toc_get(toc_t *toc)
 }
 
 void
+toc_scroll_to_heading(toc_t *toc, const gchar *heading_text)
+{
+  GtkTextMark *mark;
+
+  g_return_if_fail(toc != NULL);
+  g_return_if_fail(heading_text != NULL);
+
+  mark = g_hash_table_lookup(toc->mark_table, heading_text);
+
+  if (!mark) {
+    g_warning("No mark found for heading: %s", heading_text);
+    return;
+  }
+
+  g_message("Scrolling to mark: %p", mark);
+  gtk_text_view_scroll_to_mark(toc->view, mark, 0.0, TRUE, 0.0, 0.0);
+}
+
+void
 toc_free(toc_t *toc)
 {
   if (!toc) {
     return;
   }
 
+  g_clear_pointer(&toc->mark_table, g_hash_table_unref);
   g_object_unref(toc->table);
   g_free(toc);
 }

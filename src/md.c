@@ -4,11 +4,13 @@
 #include "html.h"
 #include "listener.h"
 #include "toc.h"
+#include "table.h"
 
 #include <cmark-gfm.h>
 #include <cmark-gfm-core-extensions.h>
 
 #define OBJ_DATA_IMG_PATH "image"
+#define OBJ_DATA_URL      "url"
 
 #define TAG_BOLD          "bold"
 #define TAG_ITALIC        "italic"
@@ -23,8 +25,7 @@
 #define TAG_H5            "h5"
 #define TAG_H6            "h6"
 
-#define RULER       "\n•                                                  •\n"
-#define PRINT_DEBUG TRUE
+#define RULER "\n•                                                  •\n"
 
 struct md {
   GtkWidget *toc_parent;
@@ -114,7 +115,7 @@ append_text(md_t *ctx, const gchar *text)
   } else {
     start_iter = end_iter;
   }
-  gtk_text_buffer_insert_markup(ctx->buffer, &end_iter, text, -1);
+  gtk_text_buffer_insert(ctx->buffer, &end_iter, text, -1);
 
   if (g_hash_table_size(ctx->current_tags) == 0) {
     return;
@@ -129,12 +130,6 @@ append_text(md_t *ctx, const gchar *text)
     GtkTextTag *tag;
     tag = gtk_text_tag_table_lookup(ctx->tag_table, tag_key);
     gtk_text_buffer_apply_tag(ctx->buffer, tag, &start_iter, &end_iter);
-
-    gchar *txt = gtk_text_buffer_get_text(ctx->buffer,
-                                          &start_iter,
-                                          &end_iter,
-                                          FALSE);
-    g_message("Applied tag %s to text: %s (%s)", (char *) tag_key, text, txt);
   }
 
   gtk_text_buffer_delete_mark(ctx->buffer, mark);
@@ -263,7 +258,6 @@ normalize_url(md_t *ctx, const char *url)
 static void
 display_html_table(md_t *ctx, html_t *html_ctx, const char *html)
 {
-  GtkWidget *frame = NULL;
   GtkWidget *table;
 
   table = html_parse(html_ctx, html);
@@ -272,9 +266,9 @@ display_html_table(md_t *ctx, html_t *html_ctx, const char *html)
     return;
   }
 
-  frame = gtk_frame_new(NULL);
-  gtk_frame_set_child(GTK_FRAME(frame), table);
-  append_widget(ctx, frame);
+  append_text(ctx, "\n");
+  append_widget(ctx, table);
+  append_text(ctx, "\n");
 }
 
 static void display_formatted_text(md_t *ctx, cmark_node *node);
@@ -297,16 +291,10 @@ display_formatted_text(md_t *ctx, cmark_node *node)
 {
   switch (cmark_node_get_type(node)) {
   case CMARK_NODE_TEXT: {
-    gchar *escaped_text;
-
-    escaped_text = g_markup_escape_text(cmark_node_get_literal(node), -1);
-    append_text(ctx, escaped_text);
-    g_message("Appended text: #%s#", escaped_text);
-    g_free(escaped_text);
+    append_text(ctx, cmark_node_get_literal(node));
     break;
   }
   case CMARK_NODE_FOOTNOTE_REFERENCE:
-    g_message("Footnote reference: %s", cmark_node_get_literal(node));
     add_tag(ctx, TAG_SUPERSCRIPT);
     append_text(ctx, cmark_node_get_literal(node));
     drop_tag(ctx, TAG_SUPERSCRIPT);
@@ -351,7 +339,7 @@ handle_image_change(listener_t *listener, GdkTexture *data, gpointer user_data)
   g_assert(ctx);
   g_assert(data);
 
-  g_message("Received image change for %s", listener_get_file_path(listener));
+  g_debug("Received image change for %s", listener_get_file_path(listener));
   for (guint i = 0; i < ctx->current_images->len; i++) {
     GtkWidget *image = g_ptr_array_index(ctx->current_images, i);
     GFile *image_path = g_object_get_data(G_OBJECT(image), OBJ_DATA_IMG_PATH);
@@ -365,9 +353,61 @@ handle_image_change(listener_t *listener, GdkTexture *data, gpointer user_data)
       continue;
     }
 
-    g_message("Updating image widget for %s", listener_get_file_path(listener));
+    g_debug("Updating image widget for %s", listener_get_file_path(listener));
     gtk_picture_set_paintable(GTK_PICTURE(image), GDK_PAINTABLE(data));
   }
+}
+
+static GtkTextTag *
+get_quote_tag(md_t *ctx)
+{
+  return gtk_text_buffer_create_tag(ctx->buffer,
+                                    NULL,
+                                    "accumulative-margin",
+                                    TRUE,
+                                    "left-margin",
+                                    50,
+                                    "style",
+                                    PANGO_STYLE_ITALIC,
+                                    NULL);
+}
+
+static gboolean
+link_button_clicked(GtkLinkButton *button, gpointer user_data)
+{
+  GFile *file;
+  md_t *ctx = user_data;
+  const char *uri;
+
+  g_assert(ctx);
+  g_assert(button);
+
+  uri = gtk_link_button_get_uri(button);
+  g_debug("Link button clicked: %s", uri);
+
+  if (g_str_has_prefix(uri, "#")) {
+    gchar *unescaped_uri = g_uri_unescape_string(uri + 1, NULL);
+    toc_scroll_to_heading(ctx->toc, unescaped_uri);
+    return TRUE;
+  }
+
+  if (g_str_has_prefix(uri, "http")) {
+    return FALSE;
+  }
+
+  if (!g_str_has_suffix(uri, ".md")) {
+    return FALSE;
+  }
+
+  file = normalize_url(ctx, uri);
+
+  if (ctx->display) {
+    ctx->display(g_file_peek_path(file), ctx->display_user_data);
+  }
+
+  g_clear_object(&file);
+
+  return TRUE;
 }
 
 static void
@@ -411,14 +451,9 @@ iterate_paragraph(md_t *ctx, cmark_node *node)
       break;
     }
 
-    case CMARK_NODE_CODE: {
-      gchar *escaped_text =
-              g_markup_escape_text(cmark_node_get_literal(child), -1);
-      append_text_with_tag(ctx, escaped_text, "code");
-      g_free(escaped_text);
-
+    case CMARK_NODE_CODE:
+      append_text_with_tag(ctx, cmark_node_get_literal(child), TAG_CODE);
       break;
-    }
 
     case CMARK_NODE_TEXT:
     case CMARK_NODE_EMPH:
@@ -443,6 +478,11 @@ iterate_paragraph(md_t *ctx, cmark_node *node)
 
       gtk_widget_add_css_class(link_button, "in-text-button");
       gtk_widget_set_halign(link_button, GTK_ALIGN_START);
+
+      g_signal_connect(link_button,
+                       "activate-link",
+                       G_CALLBACK(link_button_clicked),
+                       ctx);
 
       append_widget(ctx, link_button);
       break;
@@ -475,51 +515,15 @@ display_paragraph(md_t *ctx, cmark_node *node)
 }
 
 static void
-display_table_row(cmark_node *node,
-                  guint8 *align,
-                  guint num_col,
-                  gint row,
-                  gboolean header,
-                  GtkWidget *table)
+iterate_table_cells(table_t *table, cmark_node *row)
 {
-  cmark_node *child = cmark_node_first_child(node);
-  guint col = 0;
+  cmark_node *child = cmark_node_first_child(row);
 
   while (child) {
-    cmark_node *header_cell_child = cmark_node_first_child(child);
-    GtkWidget *label = label_new(cmark_node_get_literal(header_cell_child));
-    GtkWidget *frame = gtk_frame_new(NULL);
+    cmark_node *text = cmark_node_first_child(child);
 
-    gtk_frame_set_child(GTK_FRAME(frame), label);
-
-    gtk_widget_set_hexpand(label, TRUE);
-    gtk_label_set_wrap(GTK_LABEL(label), FALSE);
-
-    if (col >= num_col) {
-      g_warning("More header cells than columns in table");
-      break;
-    }
-
-    switch (align[col]) {
-    case 0:
-    case 'l':
-      gtk_widget_set_halign(label, GTK_ALIGN_START);
-      break;
-    case 'c':
-      gtk_widget_set_halign(label, GTK_ALIGN_CENTER);
-      break;
-    case 'r':
-      gtk_widget_set_halign(label, GTK_ALIGN_END);
-      break;
-    }
-
-    if (header) {
-      gtk_widget_add_css_class(frame, "table-header");
-    }
-
-    gtk_grid_attach(GTK_GRID(table), frame, col, row, 1, 1);
+    table_add_cell(table, cmark_node_get_literal(text));
     child = cmark_node_next(child);
-    col++;
   }
 }
 
@@ -527,28 +531,27 @@ static void
 display_table(md_t *ctx, cmark_node *node)
 {
   cmark_node *child = cmark_node_first_child(node);
+  table_t *table_ctx;
 
-  GtkWidget *table = gtk_grid_new();
-  guint8 *alignments = cmark_gfm_extensions_get_table_alignments(node);
-  guint num_cols = cmark_gfm_extensions_get_table_columns(node);
-  gint row_count = 0;
+  table_ctx = table_new(cmark_gfm_extensions_get_table_alignments(node),
+                        cmark_gfm_extensions_get_table_columns(node));
 
   while (child) {
     const gchar *name = cmark_node_get_type_string(child);
     if (g_strcmp0(name, "table_header") == 0) {
-      display_table_row(child, alignments, num_cols, row_count, TRUE, table);
+      table_new_row(table_ctx, TRUE);
+      iterate_table_cells(table_ctx, child);
     } else if (g_strcmp0(name, "table_row") == 0) {
-      display_table_row(child, alignments, num_cols, row_count, FALSE, table);
+      table_new_row(table_ctx, FALSE);
+      iterate_table_cells(table_ctx, child);
     } else {
       g_warning("Unknown table child: %s", name);
     }
-    row_count++;
     child = cmark_node_next(child);
   }
 
-  gtk_widget_set_hexpand(table, TRUE);
   append_text(ctx, "\n");
-  append_widget(ctx, table);
+  append_widget(ctx, table_finalize(table_ctx));
 }
 
 static void
@@ -660,9 +663,7 @@ display_markdown(md_t *ctx, cmark_node *node)
     if (toc_is_empty(ctx->toc)) {
       break;
     }
-    append_text(ctx, "\n");
     display_html_table(ctx, ctx->html, cmark_node_get_literal(node));
-    append_text(ctx, "\n");
     break;
   }
 
@@ -723,12 +724,27 @@ display_markdown(md_t *ctx, cmark_node *node)
 
   case CMARK_NODE_BLOCK_QUOTE: {
     cmark_node *quote_child = cmark_node_first_child(node);
-    append_text(ctx, "\n\n");
+    GtkTextTag *quote_tag;
+    GtkTextMark *start_mark;
+    GtkTextIter start_iter;
+    GtkTextIter end_iter;
+
+    quote_tag = get_quote_tag(ctx);
+
+    gtk_text_buffer_get_end_iter(ctx->buffer, &start_iter);
+    start_mark =
+            gtk_text_buffer_create_mark(ctx->buffer, NULL, &start_iter, TRUE);
+
     while (quote_child) {
       display_markdown(ctx, quote_child);
       quote_child = cmark_node_next(quote_child);
     }
-    append_text(ctx, "\n\n");
+
+    gtk_text_buffer_get_end_iter(ctx->buffer, &end_iter);
+    gtk_text_buffer_get_iter_at_mark(ctx->buffer, &start_iter, start_mark);
+    gtk_text_buffer_apply_tag(ctx->buffer, quote_tag, &start_iter, &end_iter);
+    gtk_text_buffer_delete_mark(ctx->buffer, start_mark);
+
     break;
   }
 
@@ -786,10 +802,11 @@ parse_markdown(md_t *ctx, const char *markdown)
 
   cmark_node *doc = cmark_parser_finish(parser);
 
-  if (PRINT_DEBUG) {
-    g_debug("Parsed markdown AST:");
-    print_node(doc, 0);
-  }
+#ifdef PRINT_DEBUG
+  g_print("Parsed markdown AST:\n");
+  print_node(doc, 0);
+#endif
+
   display_markdown(ctx, doc);
   cmark_node_free(doc);
 }
@@ -860,7 +877,7 @@ setup_tag_table(void)
   GtkTextTag *h1_tag = gtk_text_tag_new(TAG_H1);
   g_object_set(h1_tag,
                "scale",
-               2.0,
+               2.5,
                "weight",
                800,
                "pixels-above-lines",
@@ -871,7 +888,7 @@ setup_tag_table(void)
   GtkTextTag *h2_tag = gtk_text_tag_new(TAG_H2);
   g_object_set(h2_tag,
                "scale",
-               1.5,
+               2.1,
                "weight",
                800,
                "pixels-above-lines",
@@ -882,7 +899,7 @@ setup_tag_table(void)
   GtkTextTag *h3_tag = gtk_text_tag_new(TAG_H3);
   g_object_set(h3_tag,
                "scale",
-               1.2,
+               1.8,
                "weight",
                800,
                "pixels-above-lines",
@@ -893,7 +910,7 @@ setup_tag_table(void)
   GtkTextTag *h4_tag = gtk_text_tag_new(TAG_H4);
   g_object_set(h4_tag,
                "scale",
-               1.0,
+               1.5,
                "weight",
                800,
                "pixels-above-lines",
@@ -904,7 +921,7 @@ setup_tag_table(void)
   GtkTextTag *h5_tag = gtk_text_tag_new(TAG_H5);
   g_object_set(h5_tag,
                "scale",
-               0.9,
+               1.2,
                "weight",
                800,
                "pixels-above-lines",
@@ -915,7 +932,7 @@ setup_tag_table(void)
   GtkTextTag *h6_tag = gtk_text_tag_new(TAG_H6);
   g_object_set(h6_tag,
                "scale",
-               0.8,
+               1.0,
                "weight",
                800,
                "pixels-above-lines",

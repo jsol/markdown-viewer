@@ -30,6 +30,7 @@ sources = (
     'toc.c',
     'listener.c',
     'md.c',
+    'table.c',
   ]
 )
 

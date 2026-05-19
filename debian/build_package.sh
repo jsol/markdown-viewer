@@ -1,11 +1,11 @@
 #!/bin/bash
 
 NAME="markdown-viewer"
-FULLNAME="com.github.jsol.markdownviewer"
 VERSION=$(head -n 1 changelog | grep -Po '\d\.\d\.\d')
 BINARY="$1"
 TARGET="$2"
 DEB_FILE="$3"
+FULLNAME="$4"
 if [ -z "$BINARY" ]; then
   BINARY="../build/src/$NAME"
 fi
@@ -15,7 +15,11 @@ if [ -z "$TARGET" ]; then
 fi
 
 if [ -z "$DEB_FILE" ]; then
-  $DEB_FILE="${NAME}_${VERSION}_amd64.deb"
+  DEB_FILE="${NAME}_${VERSION}_amd64.deb"
+fi
+
+if [ -z "$FULLNAME" ]; then
+  FULLNAME="com.github.jsol.markdownviewer"
 fi
 
 echo "Building package for version $VERSION (fetched from changelog)..."

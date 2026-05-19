@@ -149,6 +149,22 @@ show_no_run_comment(struct app_ctx *ctx, const gchar *path)
 }
 
 static void
+show_invalid_file(struct app_ctx *ctx, const gchar *path)
+{
+  AdwDialog *dialog;
+  gchar *text;
+  gchar *title;
+
+  title = g_strdup_printf("Invalid file: %s", g_path_get_basename(path));
+  text = g_strdup_printf(
+          "The file %s does not exist (yet), if it is created the content will be loaded.",
+          path);
+
+  dialog = adw_alert_dialog_new(title, text);
+  adw_dialog_present(dialog, ctx->window);
+}
+
+static void
 run_dialog_response_cb(AdwDialog *dialog,
                        const char *response,
                        gpointer user_data)
@@ -245,16 +261,11 @@ setup_styles(void)
   GtkCssProvider *provider;
   GdkDisplay *display;
   const gchar *style_light =
-          ".heading-1{font-size: xx-large; font-weight: bold;} "
-          ".heading-2{font-size: x-large; font-weight: bold;} "
-          ".heading-3{font-size: large; font-weight: bold;} "
-          ".heading-4{font-size: medium; font-weight: bolder;} "
-          ".heading-5{font-size: medium; font-weight: bold;} "
-          ".heading-6{font-size: medium; font-weight: bold;} "
           ".monospace{font-family: monospace;} "
           ".table-header{background-color: #AAAAAA; font-weight: bold;} "
           ".in-text-button {padding: 0px; margin: 0px; "
-          "margin-bottom: -7px;}";
+          "margin-bottom: -7px;}"
+          "frame {border-radius: 0px;}";
 
   provider = gtk_css_provider_new();
   display = gdk_display_get_default();
@@ -276,6 +287,7 @@ show_content(const gchar *path, gpointer user_data)
     GFile *file = g_file_new_for_path(path);
     process_file(file, app);
     g_object_unref(file);
+    return;
   }
   GtkWidget *content = md_get_view(md);
   adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(app->content), content);
@@ -288,6 +300,10 @@ process_file(GFile *file, struct app_ctx *ctx)
 
   if (g_hash_table_contains(ctx->md, g_file_peek_path(file))) {
     return;
+  }
+
+  if (!g_file_test(g_file_peek_path(file), G_FILE_TEST_IS_REGULAR)) {
+    show_invalid_file(ctx, g_file_peek_path(file));
   }
 
   listener_t *listener = listener_new(file);

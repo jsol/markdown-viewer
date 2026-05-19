@@ -2,12 +2,13 @@
 #include <glib.h>
 #include <adwaita.h>
 
+#include "table.h"
+
 struct table_parse_ctx {
-  GtkWidget *table;
-  gint current_row;
-  gint current_col;
-  GtkWidget *current_cell;
+  table_t *table;
   gboolean active;
+  gboolean in_header;
+  GString *current_cell_text;
 };
 
 struct _html {
@@ -36,64 +37,45 @@ tbl_start_element(G_GNUC_UNUSED GMarkupParseContext *context,
   g_debug("Start element: %s", element_name);
 
   if (g_strcmp0(element_name, "table") == 0) {
-    ctx->table = gtk_grid_new();
-    ctx->current_row = -1;
-    ctx->current_col = -1;
+    ctx->table = table_new(NULL, 0);
     ctx->active = TRUE;
-    ctx->current_cell = NULL;
-    ctx->table = gtk_grid_new();
-    gtk_grid_set_row_spacing(GTK_GRID(ctx->table), 5);
-    gtk_grid_set_column_spacing(GTK_GRID(ctx->table), 5);
   } else if (g_strcmp0(element_name, "thead") == 0) {
-    ctx->current_col = 0;
-    ctx->current_row = 0;
+    ctx->in_header = TRUE;
+    /* Thead could contain th directly without a tr, so start a new row here.
+     * Empty rows will just be ignored by the table anyways
+     */
+    table_new_row(ctx->table, ctx->in_header);
+  } else if (g_strcmp0(element_name, "tbody") == 0) {
+    ctx->in_header = FALSE;
   } else if (g_strcmp0(element_name, "tr") == 0) {
-    ctx->current_col = 0;
-    ctx->current_row++;
+    table_new_row(ctx->table, ctx->in_header);
   } else if (g_strcmp0(element_name, "td") == 0 ||
              g_strcmp0(element_name, "th") == 0) {
-    GtkWidget *frame = gtk_frame_new(NULL);
-    GtkWidget *label = gtk_label_new(NULL);
-
-    gtk_frame_set_child(GTK_FRAME(frame), label);
-    gtk_grid_attach(GTK_GRID(ctx->table),
-                    frame,
-                    ctx->current_col,
-                    ctx->current_row,
-                    1,
-                    1);
-    ctx->current_col++;
-    ctx->current_cell = label;
-
-    if (g_strcmp0(element_name, "th") == 0) {
-      gtk_widget_add_css_class(frame, "table-header");
-    } else {
-      gtk_widget_set_halign(label, GTK_ALIGN_START);
+    if (ctx->current_cell_text) {
+      g_warning("Starting new cell before finishing previous one");
+      g_string_free(ctx->current_cell_text, TRUE);
     }
+    ctx->current_cell_text = g_string_new("");
   }
 }
 
 static void
 tbl_text(G_GNUC_UNUSED GMarkupParseContext *context,
          const char *text,
-         G_GNUC_UNUSED gsize text_len,
+         gsize text_len,
          gpointer user_data,
          G_GNUC_UNUSED GError **error)
 {
   struct table_parse_ctx *ctx = (struct table_parse_ctx *) user_data;
-  const gchar *old_text;
-  gchar *new_text;
 
-  if (ctx->current_cell == NULL) {
+  if (!ctx->current_cell_text) {
+    if (text_len > 0 && text[0] != '\n') {
+      g_warning("Text outside of cell: %s", text);
+    }
     return;
   }
-  g_message("Text element: %s", text);
 
-  old_text = gtk_label_get_text(GTK_LABEL(ctx->current_cell));
-  new_text = g_strconcat(old_text, " ", text, NULL);
-
-  gtk_label_set_text(GTK_LABEL(ctx->current_cell), new_text);
-  g_free(new_text);
+  g_string_append_len(ctx->current_cell_text, text, text_len);
 }
 
 static void
@@ -107,7 +89,13 @@ tbl_end_element(G_GNUC_UNUSED GMarkupParseContext *context,
   g_debug("End element: %s", element_name);
   if (g_strcmp0(element_name, "td") == 0 ||
       g_strcmp0(element_name, "th") == 0) {
-    ctx->current_cell = NULL;
+    if (!ctx->current_cell_text) {
+      g_warning("Ending cell element without starting one");
+      return;
+    }
+    table_add_cell(ctx->table, ctx->current_cell_text->str);
+    g_string_free(ctx->current_cell_text, TRUE);
+    ctx->current_cell_text = NULL;
   }
 
   if (g_strcmp0(element_name, "table") == 0) {
@@ -134,7 +122,7 @@ html_parse_table(html_t *ctx, const char *html)
     g_debug("Table parsing did not complete successfully.");
     return NULL;
   }
-  return ctx->table_ctx.table;
+  return table_finalize(ctx->table_ctx.table);
 }
 
 GtkWidget *

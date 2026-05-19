@@ -3,7 +3,7 @@ Version: VERSION
 Section: utils
 Priority: optional
 Architecture: amd64
-Depends: libc6, libglib2.0-0 (>= 2.72.4), libadwaita-1-0 (>=1.1.7), libgtk-4-1 (>=4.6.9), libcmark-gfm0.29.0.gfm.6 (>=0.29.0), libcmark-gfm-extensions0.29.0.gfm.6 (>=0.29.0)
+Depends: libc6, libglib2.0-0 (>= 2.72.4), libadwaita-1-0 (>=1.1.7), libgtk-4-1 (>=4.6.9)
 Maintainer: Jens Olsson <jens@rootsy.nu>
 Description: This is a GTK-based markdown viewer that refreshes on source changes
  View markdown files and also watch source files, run commands and view the

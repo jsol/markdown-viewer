@@ -13,4 +13,8 @@ add_project_arguments('-DGIT_VERSION="@0@"'.format(get_option('version')), langu
 add_project_arguments('-DG_LOG_USE_STRUCTURED=true', language: 'c')
 add_project_arguments('-DAPP_ID="@0@"'.format(get_option('appid')), language: 'c')
 
+if get_option('buildtype') == 'debug'
+  add_project_arguments('-DPRINT_DEBUG', language: 'c')
+endif
+
 subdir('src')
