@@ -2,6 +2,7 @@
 @startuml Example1
 Bob -> Alice
 Alice -> John
+John -> Bob
 @enduml
 @startuml Example2
 Client -> Server

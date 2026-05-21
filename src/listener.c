@@ -1,4 +1,5 @@
 #include "listener.h"
+#include "img_load.h"
 
 struct listener {
   GFileMonitor *monitor;
@@ -131,8 +132,7 @@ read_img(gpointer data)
   GdkTexture *texture = NULL;
   GError *error = NULL;
 
-  texture = gdk_texture_new_from_file(ctx->file, &error);
-
+  texture = img_load(ctx->file, &error);
   if (!texture) {
     g_warning("Failed to read image file %s: %s",
               g_file_peek_path(ctx->file),

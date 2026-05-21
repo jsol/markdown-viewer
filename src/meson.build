@@ -6,7 +6,6 @@ deps += dependency('libadwaita-1', version: '>=1.1.7')
 deps += dependency('gtk4', version: '>=4.6.9')
 deps += dependency('libcmark-gfm', static: true)
 
-
 # Compiler flags
 extra_cflags = [
   '-W',
@@ -22,7 +21,6 @@ extra_cflags = [
   '-Dstrip=true',
 ]
 
-
 sources = (
   [
     'color.c',
@@ -34,6 +32,25 @@ sources = (
     'table.c',
   ]
 )
+
+gly = dependency('glycin-2', required: false)
+glygtk = dependency('glycin-gtk4-2', required: false)
+
+if not gly.found()
+  gly = dependency('glycin-1', required: false)
+  glygtk = dependency('glycin-gtk4-1', required: false)
+endif
+
+if gly.found() and glygtk.found()
+  deps += gly
+  deps += glygtk
+  sources += 'img_load_glycin.c'
+else
+  sources += 'img_load_gtk.c'
+  message(
+    'Using GTK4 image loader, if building for linux, consider installing libglycin',
+  )
+endif
 
 executable(
   'markdown-viewer',

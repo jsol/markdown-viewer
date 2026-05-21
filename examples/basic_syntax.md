@@ -16,10 +16,10 @@ Heading level 5 text
 ###### Heading level 6
 Heading level 6 text
 
-
-
 Heading level 1 alternative
 ===============
+
+Yada yada yada again
 
 This is some text under a level 1 heading.
 
