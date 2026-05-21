@@ -12,6 +12,10 @@
 #define APP_ID "com.github.jsol.markdownviewer"
 #endif
 
+#ifndef VERSION
+#define VERSION "git build"
+#endif
+
 #define OBJ_DATA_CTX "app-ctx"
 
 struct app_ctx {
@@ -293,7 +297,7 @@ process_file(GFile *file, struct app_ctx *ctx)
   listener_set_cmd_cb(listener, handle_run_comment, ctx);
   g_ptr_array_add(ctx->file_listeners, listener);
   if (listener_is_md(listener)) {
-    md = md_new(listener, GTK_BOX(ctx->toc),ctx->color, show_content, ctx);
+    md = md_new(listener, GTK_BOX(ctx->toc), ctx->color, show_content, ctx);
 
     g_hash_table_insert(ctx->md,
                         g_strdup(listener_get_file_path(listener)),
@@ -368,6 +372,31 @@ menu_open_cb(G_GNUC_UNUSED GSimpleAction *action,
 }
 
 static void
+menu_about_cb(G_GNUC_UNUSED GSimpleAction *action,
+              G_GNUC_UNUSED GVariant *parameter,
+              gpointer user_data)
+{
+  AdwDialog *dialog;
+  struct app_ctx *ctx = user_data;
+
+  dialog = adw_about_dialog_new();
+  adw_about_dialog_set_application_icon(ADW_ABOUT_DIALOG(dialog), APP_ID);
+  adw_about_dialog_set_application_name(ADW_ABOUT_DIALOG(dialog),
+                                        "Markdown Viewer");
+  adw_about_dialog_set_version(ADW_ABOUT_DIALOG(dialog), VERSION);
+  adw_about_dialog_set_developer_name(ADW_ABOUT_DIALOG(dialog), "Jens Olsson");
+  adw_about_dialog_set_comments(ADW_ABOUT_DIALOG(dialog),
+                                "A simple markdown viewer");
+  adw_about_dialog_set_copyright(ADW_ABOUT_DIALOG(dialog),
+                                 "Copyright © 2026 Jens Olsson");
+  adw_about_dialog_set_license_type(ADW_ABOUT_DIALOG(dialog),
+                                    GTK_LICENSE_MIT_X11);
+  adw_about_dialog_set_website(ADW_ABOUT_DIALOG(dialog),
+                               "https://github.com/jsol/markdown-viewer");
+  adw_dialog_present(dialog, ctx->window);
+}
+
+static void
 build_menu(GtkWidget *menu_button, GtkApplication *app, struct app_ctx *ctx)
 {
   GMenu *menu_bar;
@@ -383,6 +412,14 @@ build_menu(GtkWidget *menu_button, GtkApplication *app, struct app_ctx *ctx)
   action = g_simple_action_new("open", NULL);
   g_action_map_add_action(G_ACTION_MAP(app), G_ACTION(action));
   g_signal_connect(action, "activate", G_CALLBACK(menu_open_cb), ctx);
+
+  item = g_menu_item_new("About", "app.about");
+  g_menu_append_item(menu_bar, item);
+  g_object_unref(item);
+
+  action = g_simple_action_new("about", NULL);
+  g_action_map_add_action(G_ACTION_MAP(app), G_ACTION(action));
+  g_signal_connect(action, "activate", G_CALLBACK(menu_about_cb), ctx);
 
   gtk_menu_button_set_menu_model(GTK_MENU_BUTTON(menu_button),
                                  G_MENU_MODEL(menu_bar));
