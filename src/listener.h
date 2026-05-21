@@ -48,8 +48,7 @@ typedef void (*listener_img_cb)(listener_t *listener,
  *
  * @return The new listener
  */
-listener_t *
-listener_new(GFile *file);
+listener_t *listener_new(GFile *file);
 
 void listener_set_cmd_cb(listener_t *listener,
                          listener_cmd_cb cmd_cb,
@@ -105,6 +104,17 @@ const gchar *listener_get_run_cmd(listener_t *listener);
  * @return The file path
  */
 const gchar *listener_get_file_path(listener_t *listener);
+
+/**
+ * Get the cached image. NULL if no image is cached.
+ *
+ * The image is owned by the listener.
+ *
+ * @param listener The listener
+ *
+ * @return The cached image
+ */
+GdkTexture *listener_get_img(listener_t *listener);
 
 /**
  * Free the listener.

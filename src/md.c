@@ -52,6 +52,11 @@ struct md {
   GPtrArray *current_images;
 };
 
+struct scroll_to_pos_data {
+  md_t *ctx;
+  gdouble value;
+};
+
 static void display_list(md_t *ctx, cmark_node *list_node, guint indent);
 
 static void
@@ -341,21 +346,17 @@ handle_image_change(listener_t *listener, GdkTexture *data, gpointer user_data)
   g_assert(ctx);
   g_assert(data);
 
-  g_debug("Received image change for %s", listener_get_file_path(listener));
+  g_message("Received image change for %s", listener_get_file_path(listener));
   for (guint i = 0; i < ctx->current_images->len; i++) {
     GtkWidget *image = g_ptr_array_index(ctx->current_images, i);
     GFile *image_path = g_object_get_data(G_OBJECT(image), OBJ_DATA_IMG_PATH);
 
-    if (!GTK_IS_PICTURE(image)) {
-      g_warning("Expected picture widget in current_images array");
-      continue;
-    }
     if (g_strcmp0(g_file_peek_path(image_path),
                   listener_get_file_path(listener)) != 0) {
       continue;
     }
 
-    g_debug("Updating image widget for %s", listener_get_file_path(listener));
+    g_message("Updating image widget for %s", listener_get_file_path(listener));
     gtk_picture_set_paintable(GTK_PICTURE(image), GDK_PAINTABLE(data));
   }
 }
@@ -413,45 +414,60 @@ link_button_clicked(GtkLinkButton *button, gpointer user_data)
 }
 
 static void
+display_image(md_t *ctx, cmark_node *node)
+{
+  listener_t *img_listener;
+  GtkWidget *image = NULL;
+  GdkTexture *data = NULL;
+  GFile *url = normalize_url(ctx, cmark_node_get_url(node));
+
+  img_listener =
+          g_hash_table_lookup(ctx->image_listeners, g_file_peek_path(url));
+
+  if (!img_listener) {
+    img_listener = listener_new(url);
+    g_hash_table_insert(ctx->image_listeners,
+                        g_strdup(g_file_peek_path(url)),
+                        img_listener);
+    listener_set_img_cb(img_listener, handle_image_change, ctx);
+  }
+
+  image = gtk_picture_new();
+
+  g_object_ref_sink(image);
+
+  gtk_picture_set_can_shrink(GTK_PICTURE(image), FALSE);
+  gtk_widget_set_halign(image, GTK_ALIGN_START);
+
+  g_object_set_data_full(G_OBJECT(image),
+                         OBJ_DATA_IMG_PATH,
+                         g_object_ref(url),
+                         (GDestroyNotify) g_object_unref);
+  g_ptr_array_add(ctx->current_images, g_object_ref(image));
+
+  data = listener_get_img(img_listener);
+  if (data) {
+    gtk_picture_set_paintable(GTK_PICTURE(image), GDK_PAINTABLE(data));
+  }
+
+  g_message("Adding image widget for %s", listener_get_file_path(img_listener));
+  append_text(ctx, "\n");
+  append_widget(ctx, image);
+  append_text(ctx, "\n");
+
+  g_clear_object(&image);
+  g_clear_object(&url);
+}
+
+static void
 iterate_paragraph(md_t *ctx, cmark_node *node)
 {
   cmark_node *child = cmark_node_first_child(node);
   while (child) {
     switch (cmark_node_get_type(child)) {
-    case CMARK_NODE_IMAGE: {
-      listener_t *img_listener;
-      GtkWidget *image;
-      GFile *url = normalize_url(ctx, cmark_node_get_url(child));
-
-      img_listener =
-              g_hash_table_lookup(ctx->image_listeners, g_file_peek_path(url));
-
-      if (!img_listener) {
-        img_listener = listener_new(url);
-        g_hash_table_insert(ctx->image_listeners,
-                            g_strdup(g_file_peek_path(url)),
-                            img_listener);
-      }
-
-      image = gtk_picture_new();
-
-      gtk_picture_set_can_shrink(GTK_PICTURE(image), FALSE);
-      gtk_widget_set_halign(image, GTK_ALIGN_START);
-
-      g_object_set_data_full(G_OBJECT(image),
-                             OBJ_DATA_IMG_PATH,
-                             g_object_ref(url),
-                             (GDestroyNotify) g_object_unref);
-      g_ptr_array_add(ctx->current_images, g_object_ref_sink(image));
-      listener_set_img_cb(img_listener, handle_image_change, ctx);
-
-      append_text(ctx, "\n");
-      append_widget(ctx, image);
-      append_text(ctx, "\n");
-
-      g_clear_object(&url);
+    case CMARK_NODE_IMAGE:
+      display_image(ctx, child);
       break;
-    }
 
     case CMARK_NODE_CODE:
       append_text_with_tag(ctx, cmark_node_get_literal(child), TAG_CODE);
@@ -958,16 +974,38 @@ show_content(gpointer user_data)
 {
   md_t *ctx = user_data;
 
+  g_message("Displaying markdown");
   ctx->display(listener_get_file_path(ctx->listener), ctx->display_user_data);
+}
+
+static void
+scroll_to_pos(gpointer user_data)
+{
+  struct scroll_to_pos_data *data = user_data;
+  GtkAdjustment *scroll_adjustment;
+
+  g_message("Scrolling to position: %f", data->value);
+  scroll_adjustment =
+          gtk_scrollable_get_vadjustment(GTK_SCROLLABLE(data->ctx->view));
+
+  g_message("Scroll position: %f", gtk_adjustment_get_value(scroll_adjustment));
+  gtk_adjustment_set_value(scroll_adjustment, data->value);
+  g_free(data);
 }
 
 static void
 handle_markdown(listener_t *listener, const gchar *markdown, gpointer user_data)
 {
   md_t *ctx = user_data;
+  GtkAdjustment *scroll_adjustment;
+  gdouble current_scroll;
 
   g_message("Parsing markdown file: %s", listener_get_file_path(listener));
 
+  scroll_adjustment = gtk_scrollable_get_vadjustment(GTK_SCROLLABLE(ctx->view));
+  current_scroll = gtk_adjustment_get_value(scroll_adjustment);
+
+  g_message("Scroll position: %f", current_scroll);
   clear_md(ctx);
 
   ctx->root_path = g_path_get_dirname(listener_get_file_path(listener));
@@ -1011,6 +1049,13 @@ handle_markdown(listener_t *listener, const gchar *markdown, gpointer user_data)
 
   set_sidebar_title(ctx, listener);
   parse_markdown(ctx, markdown);
+
+  struct scroll_to_pos_data *data = g_new0(struct scroll_to_pos_data, 1);
+  data->ctx = ctx;
+  data->value = current_scroll;
+
+  g_message("Handling markdown done");
+  g_idle_add_once(scroll_to_pos, data);
 }
 
 md_t *

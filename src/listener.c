@@ -16,6 +16,7 @@ struct listener {
   /* For image files */
   listener_img_cb img_cb;
   gpointer img_user_data;
+  GdkTexture *img_cache;
 
   /** For command execution */
   gchar *original_run_cmd;
@@ -141,7 +142,8 @@ read_img(gpointer data)
   }
 
   ctx->img_cb(ctx, texture, ctx->img_user_data);
-  g_clear_object(&texture);
+  g_clear_object(&ctx->img_cache);
+  ctx->img_cache = texture;
 }
 
 static gboolean
@@ -404,4 +406,12 @@ listener_free(listener_t *listener)
   g_clear_object(&listener->file);
   g_free(listener->checksum);
   g_free(listener);
+}
+
+GdkTexture *
+listener_get_img(listener_t *listener)
+{
+  g_return_val_if_fail(listener != NULL, NULL);
+
+  return listener->img_cache;
 }
