@@ -346,7 +346,6 @@ handle_image_change(listener_t *listener, GdkTexture *data, gpointer user_data)
   g_assert(ctx);
   g_assert(data);
 
-  g_message("Received image change for %s", listener_get_file_path(listener));
   for (guint i = 0; i < ctx->current_images->len; i++) {
     GtkWidget *image = g_ptr_array_index(ctx->current_images, i);
     GFile *image_path = g_object_get_data(G_OBJECT(image), OBJ_DATA_IMG_PATH);
@@ -356,7 +355,7 @@ handle_image_change(listener_t *listener, GdkTexture *data, gpointer user_data)
       continue;
     }
 
-    g_message("Updating image widget for %s", listener_get_file_path(listener));
+    g_debug("Updating image widget for %s", listener_get_file_path(listener));
     gtk_picture_set_paintable(GTK_PICTURE(image), GDK_PAINTABLE(data));
   }
 }
@@ -450,7 +449,6 @@ display_image(md_t *ctx, cmark_node *node)
     gtk_picture_set_paintable(GTK_PICTURE(image), GDK_PAINTABLE(data));
   }
 
-  g_message("Adding image widget for %s", listener_get_file_path(img_listener));
   append_text(ctx, "\n");
   append_widget(ctx, image);
   append_text(ctx, "\n");
@@ -736,7 +734,6 @@ display_markdown(md_t *ctx, cmark_node *node)
                                              -1,
                                              TAG_HORIZONTAL,
                                              NULL);
-    g_message("Displayed thematic break");
     break;
   }
 
@@ -974,7 +971,6 @@ show_content(gpointer user_data)
 {
   md_t *ctx = user_data;
 
-  g_message("Displaying markdown");
   ctx->display(listener_get_file_path(ctx->listener), ctx->display_user_data);
 }
 
@@ -984,11 +980,9 @@ scroll_to_pos(gpointer user_data)
   struct scroll_to_pos_data *data = user_data;
   GtkAdjustment *scroll_adjustment;
 
-  g_message("Scrolling to position: %f", data->value);
   scroll_adjustment =
           gtk_scrollable_get_vadjustment(GTK_SCROLLABLE(data->ctx->view));
 
-  g_message("Scroll position: %f", gtk_adjustment_get_value(scroll_adjustment));
   gtk_adjustment_set_value(scroll_adjustment, data->value);
   g_free(data);
 }
@@ -1005,7 +999,6 @@ handle_markdown(listener_t *listener, const gchar *markdown, gpointer user_data)
   scroll_adjustment = gtk_scrollable_get_vadjustment(GTK_SCROLLABLE(ctx->view));
   current_scroll = gtk_adjustment_get_value(scroll_adjustment);
 
-  g_message("Scroll position: %f", current_scroll);
   clear_md(ctx);
 
   ctx->root_path = g_path_get_dirname(listener_get_file_path(listener));
@@ -1013,14 +1006,12 @@ handle_markdown(listener_t *listener, const gchar *markdown, gpointer user_data)
   if (ctx->toc_box) {
     GtkWidget *old_box;
     GtkWidget *new_box;
-    g_message("Clearing old toc");
 
     old_box = ctx->toc_box;
     new_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_box_insert_child_after(GTK_BOX(ctx->toc_parent), new_box, old_box);
     gtk_box_remove(GTK_BOX(ctx->toc_parent), old_box);
     ctx->toc_box = new_box;
-    g_message("New toc box: %p", ctx->toc_box);
   } else {
     ctx->toc_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_box_append(GTK_BOX(ctx->toc_parent), ctx->toc_box);
@@ -1054,7 +1045,6 @@ handle_markdown(listener_t *listener, const gchar *markdown, gpointer user_data)
   data->ctx = ctx;
   data->value = current_scroll;
 
-  g_message("Handling markdown done");
   g_idle_add_once(scroll_to_pos, data);
 }
 

@@ -6,8 +6,8 @@
 #include "color.h"
 
 struct _table {
-  guint num_align;
-  guint *align;
+  guint16 num_align;
+  guint8 *align;
 
   GtkWidget *table;
   gint current_col;
@@ -23,8 +23,8 @@ table_new(guint8 *align, guint16 num_col)
   table->num_align = num_col;
 
   if (align) {
-    table->align = g_new(guint, num_col);
-    memcpy(table->align, align, num_col * sizeof(guint));
+    table->align = g_new(guint8, num_col);
+    memcpy(table->align, align, num_col * sizeof(guint8));
   } else {
     table->num_align = 0;
   }

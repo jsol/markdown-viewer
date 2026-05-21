@@ -97,7 +97,6 @@ sidebar_item_clicked(GtkWidget *button, gpointer user_data)
 
   g_assert(toc);
   g_assert(mark);
-  g_message("Scrolling to mark: %p", mark);
 
   if (toc->cb) {
     toc->cb(toc->user_data);
