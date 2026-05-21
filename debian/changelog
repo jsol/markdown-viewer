@@ -1,3 +1,15 @@
+markdown-viewer (1.0.0) unstable; urgency=medium
+
+  * Rewriting to use GTextView
+  * Styling in general
+  * Dark mode support
+  * Unified table rendering
+  * Supporting all the default Markdown features
+  * Supporting GFM tables
+  * Glycin image loading when supported
+
+ -- Jens Olsson <jens@rootsy.nu>  Thu, 21 May 2026 23:00:00 +0000
+
 markdown-viewer (0.0.1) unstable; urgency=medium
 
   * Initial release.
